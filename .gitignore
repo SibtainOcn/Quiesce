@@ -1,0 +1,17 @@
+
+
+# Local data & config files (runtime generated)
+*.dat
+cleaner_config.dat
+qc.dat
+
+# Binaries
+*.exe
+
+# IDE & OS clutter
+.vscode/
+.idea/
+*.tmp
+*.log
+Thumbs.db
+Desktop.ini
