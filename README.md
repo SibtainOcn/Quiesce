@@ -64,7 +64,7 @@ go build -o qc.exe
 
 - **OS**: Windows 10 or 11 (64-bit)
 - **Privileges**: Administrator (will prompt via UAC if launched normally)
-
+[Download qc.exe](https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc.exe)
 ---
 
 ## Support & License
