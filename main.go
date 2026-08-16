@@ -1,3 +1,13 @@
+// Quiesce - Windows system cleaner and RAM optimizer.
+//
+// Copyright (c) 2026 SibtainOcn
+// https://github.com/SibtainOcn/Quiesce
+//
+// Licensed under the Quiesce Source-Available License (QSAL) v1.0.
+// Source-available for transparency and personal use. Redistribution of the
+// source or of self-built binaries, and reuse of this code in other projects,
+// require prior written permission from the author. See LICENSE.
+
 package main
 
 import (
@@ -19,6 +29,16 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	// Informational flags are handled BEFORE elevation: checking what a
+	// binary claims to be (--version prints author, repo, license and the
+	// executable's own SHA-256) should never require granting it Admin.
+	// EnsureAdmin relaunches without arguments, so a flag would be lost
+	// across the elevation anyway.
+	EnableVirtualTerminalProcessing()
+	if HandleCLIFlags(os.Args[1:]) {
+		return
+	}
 
 	// Ensure Administrator privilege
 	EnsureAdmin()
