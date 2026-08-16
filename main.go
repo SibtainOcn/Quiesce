@@ -1,12 +1,18 @@
 // Quiesce - Windows system cleaner and RAM optimizer.
+// Copyright (C) 2026 SibtainOcn <https://github.com/SibtainOcn/Quiesce>
 //
-// Copyright (c) 2026 SibtainOcn
-// https://github.com/SibtainOcn/Quiesce
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
 //
-// Licensed under the Quiesce Source-Available License (QSAL) v1.0.
-// Source-available for transparency and personal use. Redistribution of the
-// source or of self-built binaries, and reuse of this code in other projects,
-// require prior written permission from the author. See LICENSE.
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program. If not, see <https://www.gnu.org/licenses/>.
 
 package main
 
