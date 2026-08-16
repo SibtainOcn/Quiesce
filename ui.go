@@ -310,7 +310,7 @@ func DrawMainMenu(cfg *Config, osP1, osP2, host, user string) int {
 	pln("+---------------------------------------+")
 	pln("            QUIESCE")
 	pln("+---------------------------------------+")
-	pf("  %sSibtainOcn ~ %sQuiesce v2.1%s\n", WHITE, RED, RST)
+	pf("  %s%s ~ %s%s v%s%s\n", WHITE, Author, RED, AppName, Version, RST)
 	pf("  %s%s%s%s%s\n", WHITE, osP1, RED, osP2, RST)
 	pln("+---------------------------------------+")
 	pln()
@@ -575,6 +575,7 @@ func PrintSummary(cfg *Config, results StepResults) {
 	fmt.Println("  ALL DONE - Performance Boost Complete!")
 	fmt.Println("+---------------------------------------+")
 	fmt.Println()
-	fmt.Println("  SibtainOcn ~ Quiesce v2.1")
+	fmt.Printf("  %s\n", VersionLine())
+	fmt.Printf("  %s%s%s\n", CYAN, Repo, RST)
 	fmt.Println()
 }
