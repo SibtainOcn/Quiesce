@@ -54,12 +54,35 @@ Settings Controls:
 
 ---
 
+## Verifying Your Copy
+
+Quiesce runs with Administrator rights, so it's worth confirming the binary you
+have is the official one. Every build carries its own identity:
+
+```bash
+qc --version
+```
+
+This prints the version, author, repository, license and the executable's own
+SHA-256 — and it does **not** require Administrator. Compare that hash against
+the checksum published with the [official release](https://github.com/SibtainOcn/Quiesce/releases).
+A mismatch means the binary is not an official build.
+
+---
+
 ## Building from Source
 
 Requires Go 1.23+ on Windows:
 
 ```bash
 go build -o qc.exe
+```
+
+The commit hash and build time are stamped in automatically from git. To set an
+explicit version string:
+
+```bash
+go build -ldflags "-X main.Version=2.2.0" -o qc.exe
 ```
 
 ---
@@ -73,7 +96,13 @@ go build -o qc.exe
 
 ## Support & License
 
-- **License**: MIT - see [LICENSE](LICENSE)
+- **License**: Quiesce Source-Available License (QSAL) v1.0 — see [LICENSE](LICENSE)
+
+  The source is public for transparency: this tool needs Administrator rights,
+  so you should be able to read exactly what it does before trusting it. You may
+  read it, clone it, and build it for your own personal use. Redistributing the
+  source or your own builds, or reusing this code in another project, needs
+  written permission from the author.
 - **Support**: If Quiesce saved your pc from clutter free junks, optimize and boost performance, feel free to support the project:
 
 <a href="https://buymeacoffee.com/REDACTED"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
