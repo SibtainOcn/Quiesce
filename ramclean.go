@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -13,9 +14,15 @@ import (
 var (
 	modntdll                   = windows.NewLazySystemDLL("ntdll.dll")
 	modkernel32                = windows.NewLazySystemDLL("kernel32.dll")
+	modpsapi                   = windows.NewLazySystemDLL("psapi.dll")
+	moduser32                  = windows.NewLazySystemDLL("user32.dll")
 	procNtSetSystemInformation = modntdll.NewProc("NtSetSystemInformation")
 	procGlobalMemoryStatusEx   = modkernel32.NewProc("GlobalMemoryStatusEx")
 	procGetSystemTimes         = modkernel32.NewProc("GetSystemTimes")
+	procSetSystemFileCacheSize = modkernel32.NewProc("SetSystemFileCacheSize")
+	procEmptyWorkingSet        = modpsapi.NewProc("EmptyWorkingSet")
+	procGetForegroundWindow    = moduser32.NewProc("GetForegroundWindow")
+	procGetWindowThreadProcId  = moduser32.NewProc("GetWindowThreadProcessId")
 )
 
 const (
@@ -43,6 +50,21 @@ type MemoryStats struct {
 	UsedPercent float64
 }
 
+// RamResult carries everything the end-of-run summary needs to report about
+// step [10] - the totals plus which of the four sub-operations actually ran,
+// so the summary can attribute the numbers instead of just showing an MB delta.
+type RamResult struct {
+	FreedMB      int64
+	BeforePct    float64
+	AfterPct     float64
+	DropPct      float64
+	OpsRun       []string // short labels of the sub-options that executed
+	Trimmed      int      // processes trimmed (working-set trim only)
+	TrimSkipped  int      // processes skipped (protected/no access)
+	PrivFailed   bool     // could not enable SeProfileSingleProcessPrivilege
+	NothingToRun bool     // all four sub-options were OFF
+}
+
 type SystemStats struct {
 	CpuLoad uint64
 	UsedGB  float64
@@ -50,7 +72,14 @@ type SystemStats struct {
 	Pct     uint64
 }
 
+// EnablePrivilege enables SeProfileSingleProcessPrivilege, which is what
+// NtSetSystemInformation(SystemMemoryListInformation) requires.
 func EnablePrivilege() bool {
+	return enablePrivilege("SeProfileSingleProcessPrivilege")
+}
+
+// enablePrivilege enables a named privilege on the current process token.
+func enablePrivilege(name string) bool {
 	var token windows.Token
 	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &token)
 	if err != nil {
@@ -58,7 +87,7 @@ func EnablePrivilege() bool {
 	}
 	defer token.Close()
 
-	privName, _ := windows.UTF16PtrFromString("SeProfileSingleProcessPrivilege")
+	privName, _ := windows.UTF16PtrFromString(name)
 	var luid windows.LUID
 	err = windows.LookupPrivilegeValue(nil, privName, &luid)
 	if err != nil {
@@ -97,6 +126,122 @@ func PurgeStandbyList() int32 {
 		unsafe.Sizeof(cmd),
 	)
 	return int32(r1)
+}
+
+// PurgeSystemFileCache flushes the kernel's system file cache working set by
+// calling SetSystemFileCacheSize with min/max set to (SIZE_T)-1, which is the
+// documented "reset the cache" sentinel. This only drops cached file data -
+// no process ever loses a page it is currently working on - so it is the safe
+// half of what vendor "memory booster" tools do.
+//
+// Requires SeIncreaseQuotaPrivilege.
+func PurgeSystemFileCache() bool {
+	// LazyProc.Call panics if the export can't be resolved, so resolve first.
+	if err := procSetSystemFileCacheSize.Find(); err != nil {
+		return false
+	}
+	if !enablePrivilege("SeIncreaseQuotaPrivilege") {
+		return false
+	}
+	minusOne := ^uintptr(0) // (SIZE_T)-1
+	r1, _, _ := procSetSystemFileCacheSize.Call(minusOne, minusOne, 0)
+	return r1 != 0
+}
+
+// protectedProcNames are processes we never trim. Trimming these either fails
+// outright (they are protected) or hurts responsiveness far more than the
+// memory it reclaims is worth.
+var protectedProcNames = map[string]bool{
+	"system":             true,
+	"registry":           true,
+	"memory compression": true,
+	"smss.exe":           true,
+	"csrss.exe":          true,
+	"wininit.exe":        true,
+	"winlogon.exe":       true,
+	"services.exe":       true,
+	"lsass.exe":          true,
+	"msmpeng.exe":        true,
+	"dwm.exe":            true,
+}
+
+// getForegroundPID returns the PID owning the current foreground window, or 0
+// if there isn't one. That process is skipped during a working-set trim so the
+// app the user is actually looking at doesn't get paged out from under them.
+func getForegroundPID() uint32 {
+	if procGetForegroundWindow.Find() != nil || procGetWindowThreadProcId.Find() != nil {
+		return 0
+	}
+	hwnd, _, _ := procGetForegroundWindow.Call()
+	if hwnd == 0 {
+		return 0
+	}
+	var pid uint32
+	procGetWindowThreadProcId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	return pid
+}
+
+// TrimAllWorkingSets calls EmptyWorkingSet on every accessible process, which
+// forces its private working set out to the pagefile/standby list. This is the
+// operation that makes vendor cleaners (ASUS, etc.) show a large drop in "in
+// use" memory - but those pages were live, so the owning apps will hard-fault
+// them straight back in on next use. Hence: opt-in only.
+//
+// Skipped: PID 0/4, our own process, the foreground window's process, and the
+// protected system processes above.
+//
+// Returns (trimmed, skipped).
+func TrimAllWorkingSets() (int, int) {
+	if err := procEmptyWorkingSet.Find(); err != nil {
+		return 0, 0
+	}
+
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return 0, 0
+	}
+	defer windows.CloseHandle(snapshot)
+
+	selfPID := uint32(windows.GetCurrentProcessId())
+	fgPID := getForegroundPID()
+
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	if err := windows.Process32First(snapshot, &entry); err != nil {
+		return 0, 0
+	}
+
+	trimmed, skipped := 0, 0
+	for {
+		pid := entry.ProcessID
+		name := strings.ToLower(windows.UTF16ToString(entry.ExeFile[:]))
+
+		if pid > 4 && pid != selfPID && pid != fgPID && !protectedProcNames[name] {
+			h, openErr := windows.OpenProcess(
+				windows.PROCESS_SET_QUOTA|windows.PROCESS_QUERY_LIMITED_INFORMATION,
+				false, pid,
+			)
+			if openErr != nil {
+				skipped++
+			} else {
+				r1, _, _ := procEmptyWorkingSet.Call(uintptr(h))
+				if r1 != 0 {
+					trimmed++
+				} else {
+					skipped++
+				}
+				windows.CloseHandle(h)
+			}
+		} else {
+			skipped++
+		}
+
+		if err := windows.Process32Next(snapshot, &entry); err != nil {
+			break
+		}
+	}
+
+	return trimmed, skipped
 }
 
 func GetMemoryStats() MemoryStats {
@@ -195,42 +340,115 @@ func GetSystemStats() SystemStats {
 	}
 }
 
-func RunRamCleaner() int64 {
+// RunRamCleaner runs whichever of the four memory operations are enabled in
+// cfg, in the order that makes each one count: working sets are trimmed and
+// dirty pages flushed FIRST so those pages land on the standby list, and the
+// standby purge runs LAST so it sweeps everything the earlier steps produced.
+func RunRamCleaner(cfg *Config) RamResult {
 	before := GetMemoryStats()
+	result := RamResult{BeforePct: before.UsedPercent, AfterPct: before.UsedPercent}
+
+	// Build the list of enabled operations up front so the step counter
+	// ("Step 2/4") reflects what's actually going to run.
+	type ramStep struct {
+		title string
+		note  string
+		run   func()
+	}
+	var steps []ramStep
+
+	if cfg.RamTrimWorkingSets == 1 {
+		result.OpsRun = append(result.OpsRun, "trim")
+		steps = append(steps, ramStep{
+			"Trimming process working sets...",
+			"(Paging out live app memory - skips the foreground app)",
+			func() {
+				trimmed, skipped := TrimAllWorkingSets()
+				result.Trimmed = trimmed
+				result.TrimSkipped = skipped
+				if trimmed > 0 {
+					fmt.Printf("    \x1b[31m%d processes trimmed, %d skipped (protected/no access)\x1b[0m\n", trimmed, skipped)
+				} else {
+					fmt.Printf("    \x1b[33mNo processes trimmed (%d skipped) - run as Administrator\x1b[0m\n", skipped)
+				}
+			},
+		})
+	}
+
+	if cfg.RamFlushModified == 1 {
+		result.OpsRun = append(result.OpsRun, "flush")
+		steps = append(steps, ramStep{
+			"Flushing modified page list...",
+			"(Writing dirty pages to disk so they can be freed)",
+			func() {
+				res := FlushModifiedList()
+				status := FormatNTSTATUS(res)
+				if res == 0 {
+					fmt.Printf("    \x1b[31mModified page list flushed - NTSTATUS: %s\x1b[0m\n", status)
+				} else {
+					fmt.Printf("    \x1b[33mFlushModifiedList returned NTSTATUS: %s\x1b[0m\n", status)
+				}
+			},
+		})
+	}
+
+	if cfg.RamFileCache == 1 {
+		result.OpsRun = append(result.OpsRun, "file cache")
+		steps = append(steps, ramStep{
+			"Flushing system file cache...",
+			"(Dropping the kernel's cached file data - safe, cache only)",
+			func() {
+				if PurgeSystemFileCache() {
+					fmt.Println("    \x1b[31mSystem file cache flushed\x1b[0m")
+				} else {
+					fmt.Println("    \x1b[33mCould not flush system file cache - run as Administrator\x1b[0m")
+				}
+			},
+		})
+	}
+
+	if cfg.RamPurgeStandby == 1 {
+		result.OpsRun = append(result.OpsRun, "standby")
+		steps = append(steps, ramStep{
+			"Purging standby list...",
+			"(Freeing cached/standby memory - this is the main operation)",
+			func() {
+				res := PurgeStandbyList()
+				status := FormatNTSTATUS(res)
+				if res == 0 {
+					fmt.Printf("    \x1b[31mStandby list purged - NTSTATUS: %s\x1b[0m\n", status)
+				} else {
+					fmt.Printf("    \x1b[33mPurgeStandbyList returned NTSTATUS: %s\x1b[0m\n", status)
+				}
+			},
+		})
+	}
+
+	if len(steps) == 0 {
+		fmt.Println()
+		fmt.Println("    \x1b[33mAll RAM Optimization sub-options are OFF - nothing to do\x1b[0m")
+		result.NothingToRun = true
+		return result
+	}
+
+	total := len(steps) + 1
 
 	// --- Step 1: Enable privilege ---
 	fmt.Println()
-	fmt.Println("  \x1b[36m[Step 1/3] Enabling SeProfileSingleProcessPrivilege...\x1b[0m")
-	privOk := EnablePrivilege()
-	if privOk {
+	fmt.Printf("  \x1b[36m[Step 1/%d] Enabling SeProfileSingleProcessPrivilege...\x1b[0m\n", total)
+	if EnablePrivilege() {
 		fmt.Println("    \x1b[31mPrivilege enabled successfully\x1b[0m")
 	} else {
 		fmt.Println("    \x1b[33mFAILED to enable privilege\x1b[0m")
-		return 0
+		result.PrivFailed = true
+		return result
 	}
 
-	// --- Step 2: Flush modified page list ---
-	fmt.Println()
-	fmt.Println("  \x1b[36m[Step 2/3] Flushing modified page list...\x1b[0m")
-	fmt.Println("    (Writing dirty pages to disk so they can be freed)")
-	res1 := FlushModifiedList()
-	status1 := FormatNTSTATUS(res1)
-	if res1 == 0 {
-		fmt.Printf("    \x1b[31mModified page list flushed - NTSTATUS: %s\x1b[0m\n", status1)
-	} else {
-		fmt.Printf("    \x1b[33mFlushModifiedList returned NTSTATUS: %s\x1b[0m\n", status1)
-	}
-
-	// --- Step 3: Purge standby list ---
-	fmt.Println()
-	fmt.Println("  \x1b[36m[Step 3/3] Purging standby list...\x1b[0m")
-	fmt.Println("    (Freeing cached/standby memory - this is the main operation)")
-	res2 := PurgeStandbyList()
-	status2 := FormatNTSTATUS(res2)
-	if res2 == 0 {
-		fmt.Printf("    \x1b[31mStandby list purged - NTSTATUS: %s\x1b[0m\n", status2)
-	} else {
-		fmt.Printf("    \x1b[33mPurgeStandbyList returned NTSTATUS: %s\x1b[0m\n", status2)
+	for i, s := range steps {
+		fmt.Println()
+		fmt.Printf("  \x1b[36m[Step %d/%d] %s\x1b[0m\n", i+2, total, s.title)
+		fmt.Printf("    %s\n", s.note)
+		s.run()
 	}
 
 	time.Sleep(800 * time.Millisecond)
@@ -245,6 +463,10 @@ func RunRamCleaner() int64 {
 	}
 
 	dropPct := math.Round((before.UsedPercent-after.UsedPercent)*10) / 10
+
+	result.FreedMB = freedMB
+	result.AfterPct = after.UsedPercent
+	result.DropPct = dropPct
 
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")
@@ -263,11 +485,9 @@ func RunRamCleaner() int64 {
 		fmt.Println("    \x1b[33mStatus       : Try closing background apps and run again\x1b[0m")
 	}
 
-	stats := GetSystemStats()
-	fmt.Println()
-	fmt.Println("  +---------------------------------------+")
-	fmt.Printf("  \x1b[31mCPU : %d%%  -  Memory : %.2f/%.2f GB (%d%%)\x1b[0m\n", stats.CpuLoad, stats.UsedGB, stats.TotalGB, stats.Pct)
-	fmt.Println("  +---------------------------------------+")
+	// No CPU/Memory box here on purpose: the same numbers are already in the
+	// SYSTEM RESULTS block above and in the end-of-run summary, and the live
+	// row on the main menu is the one place stats belong.
 
-	return freedMB
+	return result
 }
