@@ -21,6 +21,15 @@ type Config struct {
 	RamOptimize   int
 	RecycleBin    int
 	DeepCleanup   int // AGGRESSIVE — never persisted, always starts OFF
+
+	// --- RAM Optimization sub-options (only used when RamOptimize == 1) ---
+	// The first two are the original, safe behaviour and default ON.
+	// The last two free noticeably more memory but evict live/warm pages,
+	// so they default OFF and are opt-in.
+	RamFlushModified   int // write dirty pages to disk so they become freeable
+	RamPurgeStandby    int // free the standby (cached) page list
+	RamFileCache       int // flush the kernel/system file cache working set
+	RamTrimWorkingSets int // page out every process's working set (aggressive)
 }
 
 func DefaultConfig() *Config {
@@ -36,6 +45,11 @@ func DefaultConfig() *Config {
 		DnsFlush:      1,
 		RamOptimize:   1,
 		RecycleBin:    0, // OFF by default: destructive/irreversible, so opt-in only
+
+		RamFlushModified:   1,
+		RamPurgeStandby:    1,
+		RamFileCache:       0, // opt-in: drops kernel file cache
+		RamTrimWorkingSets: 0, // opt-in: aggressive, causes hard faults afterwards
 	}
 }
 
@@ -94,6 +108,14 @@ func LoadConfig(filePath string) (*Config, error) {
 			cfg.RamOptimize = val
 		case "RECYCLE_BIN":
 			cfg.RecycleBin = val
+		case "RAM_FLUSH_MODIFIED":
+			cfg.RamFlushModified = val
+		case "RAM_PURGE_STANDBY":
+			cfg.RamPurgeStandby = val
+		case "RAM_FILE_CACHE":
+			cfg.RamFileCache = val
+		case "RAM_TRIM_WORKING_SETS":
+			cfg.RamTrimWorkingSets = val
 		}
 	}
 
@@ -102,7 +124,7 @@ func LoadConfig(filePath string) (*Config, error) {
 
 func SaveConfig(filePath string, cfg *Config) error {
 	content := fmt.Sprintf(
-		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\n",
+		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\n",
 		cfg.WinTemp,
 		cfg.UserTemp,
 		cfg.Prefetch,
@@ -114,6 +136,10 @@ func SaveConfig(filePath string, cfg *Config) error {
 		cfg.DnsFlush,
 		cfg.RamOptimize,
 		cfg.RecycleBin,
+		cfg.RamFlushModified,
+		cfg.RamPurgeStandby,
+		cfg.RamFileCache,
+		cfg.RamTrimWorkingSets,
 	)
 	return os.WriteFile(filePath, []byte(content), 0644)
 }
@@ -142,6 +168,16 @@ func (c *Config) GetVal(index int) int {
 		return c.RamOptimize
 	case 11:
 		return c.RecycleBin
+	// 101-104: RAM Optimization sub-options. Kept outside the 1..11 range so
+	// the main-menu loop over the top-level steps is unaffected.
+	case 101:
+		return c.RamFlushModified
+	case 102:
+		return c.RamPurgeStandby
+	case 103:
+		return c.RamFileCache
+	case 104:
+		return c.RamTrimWorkingSets
 	default:
 		return 0
 	}
@@ -171,6 +207,14 @@ func (c *Config) SetVal(index int, val int) {
 		c.RamOptimize = val
 	case 11:
 		c.RecycleBin = val
+	case 101:
+		c.RamFlushModified = val
+	case 102:
+		c.RamPurgeStandby = val
+	case 103:
+		c.RamFileCache = val
+	case 104:
+		c.RamTrimWorkingSets = val
 	}
 }
 

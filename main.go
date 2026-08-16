@@ -53,14 +53,17 @@ func main() {
 		ClearScreen()
 		promptRow := DrawMainMenu(cfg, osP1, osP2, host, user)
 
-		// Live CPU/Memory stats row starts updating only once the menu is
-		// fully drawn (so its first tick doesn't race the initial print),
-		// and is explicitly stopped before ANY transition away from this
+		// The prompt is printed BEFORE the live stats row starts: the stats
+		// goroutine parks the cursor at the prompt's row/column after every
+		// repaint, so the prompt text must already be on screen or its first
+		// paint would push the prompt out of column 1.
+		fmt.Print("  > ")
+
+		// Live CPU/Memory stats row - painted once immediately, then every
+		// second. Explicitly stopped before ANY transition away from this
 		// screen - Settings, running the cleaner, or exiting - so it can
 		// never write to a screen that's no longer the main menu.
 		statsStopCh := StartLiveStatsRow(promptRow)
-
-		fmt.Print("  > ")
 
 		// Single-key input loop: only ENTER (run) and F (settings) are
 		// valid. Everything else is silently ignored — no echo, no cursor
@@ -91,8 +94,11 @@ func main() {
 		results := RunCleaningPipeline(cfg)
 		PrintSummary(cfg, results)
 
+		// WaitForEnter flushes anything typed during the run first, so ENTER
+		// presses made while cleaning was in progress can't close the window
+		// before the summary has been read.
 		fmt.Print("Press ENTER to exit...")
-		ReadSingleKey()
+		WaitForEnter()
 		os.Exit(0)
 	}
 }

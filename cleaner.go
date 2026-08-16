@@ -22,6 +22,7 @@ type StepResults struct {
 	RecycleBinFailed   bool
 	RecycleBinBytes    uint64
 	RamFreedMB         int64
+	Ram                RamResult
 	DeepCleanupRan     bool
 	DeepCleanupFailed  bool
 	StepCounts         [12]int64
@@ -354,7 +355,8 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 	if cfg.RamOptimize == 1 {
 		TypeLine("[10/12] Optimizing RAM...", 0)
 		fmt.Println("+---------------------------------------+")
-		results.RamFreedMB = RunRamCleaner()
+		results.Ram = RunRamCleaner(cfg)
+		results.RamFreedMB = results.Ram.FreedMB
 	} else {
 		fmt.Println("[10/12] RAM Optimization             - \x1b[36mSKIPPED\x1b[0m")
 	}
@@ -425,20 +427,6 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 				fmt.Println("  \x1b[36m[WARN]\x1b[0m cleanmgr.exe timed out (may still be running)")
 				results.DeepCleanupFailed = true
 			}
-		}
-
-		// --- Command 2: Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase ---
-		fmt.Println()
-		fmt.Println("  Running: Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase")
-		fmt.Println("  (This can take several minutes — live output below)")
-		cmd2 := exec.Command("Dism.exe", "/online", "/Cleanup-Image", "/StartComponentCleanup", "/ResetBase")
-		cmd2.Stdout = os.Stdout
-		cmd2.Stderr = os.Stderr
-		if err2 := cmd2.Run(); err2 != nil {
-			fmt.Printf("  \x1b[36m[WARN]\x1b[0m Dism.exe returned: %v\n", err2)
-			results.DeepCleanupFailed = true
-		} else {
-			fmt.Println("  \x1b[31m[OK]\x1b[0m Dism.exe component cleanup completed")
 		}
 
 		results.DeepCleanupRan = true
