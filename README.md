@@ -18,8 +18,12 @@ A fast, lightweight Windows system cleaner and RAM optimizer. Single executable,
 | **8** | Installer Cache | Temporary Windows Installer patch cache files | **ON** |
 | **9** | DNS Resolver Cache | Flushes cached DNS records to refresh connection | **ON** |
 | **10** | RAM Optimization | Clears standby memory & dirty page lists | **ON** |
+| | ├ Flush modified list | Writes dirty pages to disk so they can be freed | **ON** |
+| | ├ Purge standby list | Frees the cached/standby page list | **ON** |
+| | ├ System file cache | Drops the kernel's cached file data | **OFF** (Opt-in) |
+| | └ Trim working sets | Pages out live app memory — frees the most, but apps re-read it from disk afterwards | **OFF** (Opt-in) |
 | **11** | Recycle Bin | Empties the Windows Recycle Bin | **OFF** (Opt-in) |
-| **12** | Deep Cleanup | System Component Cleanup (DISM) + Disk Cleanup | **OFF** (Resets after run) |
+| **12** | Deep Cleanup | Full Windows Disk Cleanup (cleanmgr, all handlers) | **OFF** (Resets after run) |
 
 Every step can be customized in the menu settings, and your choices are saved automatically.
 
