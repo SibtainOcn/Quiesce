@@ -11,7 +11,7 @@
       "0409": {
         "identity": {
           "name": "Quiesce",
-          "version": "2.2.0.0"
+          "version": "2.3.0.0"
         },
         "description": "Quiesce - Windows system cleaner and RAM optimizer",
         "minimum-os": "win7",
@@ -35,20 +35,20 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "2.2.0.0",
-          "product_version": "2.2.0.0"
+          "file_version": "2.3.0.0",
+          "product_version": "2.3.0.0"
         },
         "info": {
           "0409": {
-            "Comments": "https://github.com/SibtainOcn/Quiesce - Licensed under the Quiesce Source-Available License (QSAL) v1.0",
+            "Comments": "https://github.com/SibtainOcn/Quiesce - Free software under the GNU General Public License v3.0 or later",
             "CompanyName": "SibtainOcn",
             "FileDescription": "Quiesce - Windows system cleaner and RAM optimizer",
-            "FileVersion": "2.2.0.0",
+            "FileVersion": "2.3.0.0",
             "InternalName": "qc",
-            "LegalCopyright": "Copyright (c) 2026 SibtainOcn",
+            "LegalCopyright": "Copyright (C) 2026 SibtainOcn - GPL-3.0-or-later",
             "OriginalFilename": "qc.exe",
             "ProductName": "Quiesce",
-            "ProductVersion": "2.2.0.0"
+            "ProductVersion": "2.3.0.0"
           }
         }
       }

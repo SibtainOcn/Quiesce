@@ -1,15 +1,34 @@
+// Quiesce - Windows system cleaner and RAM optimizer.
+// Copyright (C) 2026 SibtainOcn <https://github.com/SibtainOcn/Quiesce>
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program. If not, see <https://www.gnu.org/licenses/>.
+
 package main
 
 // Identity and version information baked into every compiled binary.
 //
 // The constants below are compiled into the executable as literal bytes, so
-// they survive renaming the file, stripping the LICENSE, and re-uploading it
-// elsewhere. Anyone can recover them from a suspect binary with:
+// they survive renaming the file and re-uploading it elsewhere. Anyone can
+// recover them from a suspect binary with:
 //
 //	strings qc.exe | findstr /i SibtainOcn
 //
-// This is a forensic marker, not a legal control - the license in LICENSE is
-// what governs use. It just makes authorship of a rebadged copy easy to prove.
+// Under the GPL this is attribution and provenance, not a restriction:
+// redistributing and modifying Quiesce is explicitly allowed. What the GPL
+// does require is that recipients get the same freedoms and the source, and
+// that modified versions are marked as changed - these strings make the
+// original authorship and version easy to establish.
 
 import (
 	"crypto/sha256"
@@ -27,8 +46,9 @@ const (
 	AppShort    = "qc"
 	Author      = "SibtainOcn"
 	Repo        = "https://github.com/SibtainOcn/Quiesce"
-	LicenseName = "Quiesce Source-Available License (QSAL) v1.0"
-	Copyright   = "Copyright (c) 2026 SibtainOcn"
+	LicenseName = "GNU General Public License v3.0 or later (GPL-3.0-or-later)"
+	LicenseURL  = "https://www.gnu.org/licenses/gpl-3.0.html"
+	Copyright   = "Copyright (C) 2026 SibtainOcn"
 	ContactURL  = "https://github.com/SibtainOcn"
 )
 
@@ -39,7 +59,7 @@ const (
 // Version carries a real default so an unflagged `go build` still produces a
 // correctly-labelled binary rather than "dev".
 var (
-	Version   = "2.2.0"
+	Version   = "2.3.0"
 	Commit    = ""
 	BuildDate = ""
 )
@@ -119,19 +139,27 @@ func SelfSHA256() string {
 // PrintAbout writes the full identity block. Printed by --version/--about,
 // which run WITHOUT elevating - checking what a binary claims to be should
 // never require handing it Administrator.
+//
+// It also carries the notice GPLv3 section 15/16 asks interactive programs to
+// display: no warranty, and free to redistribute under the license terms.
 func PrintAbout() {
 	fmt.Println()
 	fmt.Printf("  %s %s\n", AppName, versionDetail())
 	fmt.Printf("  Author     : %s\n", Author)
 	fmt.Printf("  Repository : %s\n", Repo)
 	fmt.Printf("  License    : %s\n", LicenseName)
+	fmt.Printf("               %s\n", LicenseURL)
 	fmt.Printf("  %s\n", Copyright)
 	fmt.Printf("  Built with : %s (%s/%s)\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("  SHA-256    : %s\n", SelfSHA256())
 	fmt.Println()
+	fmt.Println("  This program comes with ABSOLUTELY NO WARRANTY. It is free software,")
+	fmt.Println("  and you are welcome to redistribute it under the conditions of the")
+	fmt.Println("  GNU GPL version 3 or later. See the LICENSE file for details.")
+	fmt.Println()
 	fmt.Println("  Compare the SHA-256 above against the checksum published with the")
 	fmt.Printf("  official release at %s/releases\n", Repo)
-	fmt.Println("  A mismatch means this binary is NOT an official build.")
+	fmt.Println("  A mismatch means this binary is not an official build.")
 	fmt.Println()
 }
 
