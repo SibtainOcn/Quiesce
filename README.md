@@ -76,6 +76,6 @@ go build -o qc.exe
 - **License**: MIT - see [LICENSE](LICENSE)
 - **Support**: If Quiesce saved your pc from clutter free junks, optimize and boost performance, feel free to support the project:
 
-<a href="https://buymeacoffee.com/sibtainocean"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
+<a href="https://buymeacoffee.com/sibtainocn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
 
 
