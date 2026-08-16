@@ -36,7 +36,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 )
@@ -52,23 +51,24 @@ const (
 	ContactURL  = "https://github.com/SibtainOcn"
 )
 
-// Version/Commit/BuildDate are overridable at build time:
+// Version and Commit are overridable at build time:
 //
-//	go build -ldflags "-X main.Version=2.2.0 -X main.Commit=$(git rev-parse --short HEAD)" -o qc.exe
+//	go build -ldflags "-X main.Version=2.3.0" -o qc.exe
 //
 // Version carries a real default so an unflagged `go build` still produces a
-// correctly-labelled binary rather than "dev".
+// correctly-labelled binary rather than "dev". Build timestamps are
+// deliberately not recorded or shown - they add noise to every version check
+// and make otherwise identical builds look different.
 var (
-	Version   = "2.3.0"
-	Commit    = ""
-	BuildDate = ""
+	Version = "2.3.0"
+	Commit  = ""
 )
 
-// init fills Commit/BuildDate from the VCS stamps the Go toolchain records
-// automatically when building inside a git work tree, so a plain `go build`
-// still carries provenance even without -ldflags.
+// init fills Commit from the VCS stamp the Go toolchain records automatically
+// when building inside a git work tree, so a plain `go build` still identifies
+// exactly which source a binary came from. That is what a bug report needs.
 func init() {
-	if Commit != "" && BuildDate != "" {
+	if Commit != "" {
 		return
 	}
 	info, ok := debug.ReadBuildInfo()
@@ -78,12 +78,8 @@ func init() {
 	for _, s := range info.Settings {
 		switch s.Key {
 		case "vcs.revision":
-			if Commit == "" && len(s.Value) >= 7 {
+			if len(s.Value) >= 7 {
 				Commit = s.Value[:7]
-			}
-		case "vcs.time":
-			if BuildDate == "" {
-				BuildDate = s.Value
 			}
 		case "vcs.modified":
 			if s.Value == "true" {
@@ -94,25 +90,9 @@ func init() {
 }
 
 // VersionLine is the single-line identity shown in the menu banner, e.g.
-// "SibtainOcn ~ Quiesce v2.2.0".
+// "SibtainOcn ~ Quiesce v2.3.0".
 func VersionLine() string {
 	return fmt.Sprintf("%s ~ %s v%s", Author, AppName, Version)
-}
-
-// versionDetail renders "v2.2.0 (a1b2c3d, 2026-08-16T...)" with whichever
-// build stamps are actually present.
-func versionDetail() string {
-	var parts []string
-	if Commit != "" {
-		parts = append(parts, Commit)
-	}
-	if BuildDate != "" {
-		parts = append(parts, BuildDate)
-	}
-	if len(parts) == 0 {
-		return "v" + Version
-	}
-	return fmt.Sprintf("v%s (%s)", Version, strings.Join(parts, ", "))
 }
 
 // SelfSHA256 returns the SHA-256 of the running executable, so a user can
@@ -136,30 +116,27 @@ func SelfSHA256() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// PrintAbout writes the full identity block. Printed by --version/--about,
-// which run WITHOUT elevating - checking what a binary claims to be should
-// never require handing it Administrator.
+// PrintAbout writes the identity block. Printed by --version/--about, which
+// run WITHOUT elevating - checking what a binary claims to be should never
+// require handing it Administrator.
 //
-// It also carries the notice GPLv3 section 15/16 asks interactive programs to
-// display: no warranty, and free to redistribute under the license terms.
+// Kept to six lines. Everything here answers a question someone actually has:
+// which build is this, who wrote it, where does it come from, what may I do
+// with it, and is my copy the official one. The GPL notice is condensed to the
+// one line GPLv3 asks interactive programs to show.
 func PrintAbout() {
+	build := ""
+	if Commit != "" {
+		build = "  (" + Commit + ")"
+	}
+
 	fmt.Println()
-	fmt.Printf("  %s %s\n", AppName, versionDetail())
-	fmt.Printf("  Author     : %s\n", Author)
-	fmt.Printf("  Repository : %s\n", Repo)
-	fmt.Printf("  License    : %s\n", LicenseName)
-	fmt.Printf("               %s\n", LicenseURL)
-	fmt.Printf("  %s\n", Copyright)
-	fmt.Printf("  Built with : %s (%s/%s)\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("  SHA-256    : %s\n", SelfSHA256())
+	fmt.Printf("  %s v%s%s\n", AppName, Version, build)
+	fmt.Printf("  %s  -  %s\n", Author, Repo)
+	fmt.Println("  GPL-3.0-or-later - free software, with no warranty")
 	fmt.Println()
-	fmt.Println("  This program comes with ABSOLUTELY NO WARRANTY. It is free software,")
-	fmt.Println("  and you are welcome to redistribute it under the conditions of the")
-	fmt.Println("  GNU GPL version 3 or later. See the LICENSE file for details.")
-	fmt.Println()
-	fmt.Println("  Compare the SHA-256 above against the checksum published with the")
-	fmt.Printf("  official release at %s/releases\n", Repo)
-	fmt.Println("  A mismatch means this binary is not an official build.")
+	fmt.Printf("  SHA-256  %s\n", SelfSHA256())
+	fmt.Printf("  Compare with the checksum on %s/releases\n", Repo)
 	fmt.Println()
 }
 
@@ -167,13 +144,12 @@ func PrintAbout() {
 // interface; these flags exist for identity checks and scripting.
 func PrintHelp() {
 	fmt.Println()
-	fmt.Printf("  %s %s - Windows system cleaner and RAM optimizer\n", AppName, versionDetail())
+	fmt.Printf("  %s v%s - Windows system cleaner and RAM optimizer\n", AppName, Version)
 	fmt.Println()
 	fmt.Printf("  Usage: %s [flag]\n", AppShort)
 	fmt.Println()
-	fmt.Println("    (no flag)          Launch the interactive menu (elevates via UAC)")
-	fmt.Println("    -v, --version      Print version, author, repository and license")
-	fmt.Println("        --about        Same as --version")
+	fmt.Println("    (no flag)          Launch the interactive menu")
+	fmt.Println("    -v, --version      Version, author, license and checksum")
 	fmt.Println("    -h, --help         Show this help")
 	fmt.Println()
 }
