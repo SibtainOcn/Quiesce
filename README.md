@@ -90,8 +90,14 @@ go build -ldflags "-X main.Version=2.2.0" -o qc.exe
 ## Requirements
 
 - **OS**: Windows 10 or 11 (64-bit)
-- **Privileges**: Administrator (will prompt via UAC if launched normally)
-[Download qc.exe](https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc.exe)
+- **Privileges**: Administrator (will prompt via UAC when you run a clean)
+
+### Download
+
+**[⬇ Download qc.exe](https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc.exe)** — always the latest release.
+
+Put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`) to run `qc` from any terminal.
+
 ---
 
 ## Support & License
