@@ -96,13 +96,16 @@ go build -ldflags "-X main.Version=2.2.0" -o qc.exe
 
 ## Support & License
 
-- **License**: Quiesce Source-Available License (QSAL) v1.0 — see [LICENSE](LICENSE)
+- **License**: [GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`)
 
-  The source is public for transparency: this tool needs Administrator rights,
-  so you should be able to read exactly what it does before trusting it. You may
-  read it, clone it, and build it for your own personal use. Redistributing the
-  source or your own builds, or reusing this code in another project, needs
-  written permission from the author.
+  Quiesce is free software. You may use, study, share, and modify it. If you
+  distribute a modified version, it must also be free software under the GPL,
+  with source available — so every user of a fork keeps the same freedoms you
+  have here. This matters for a tool that runs as Administrator: nobody should
+  have to trust a version of it they cannot read.
+
+  Quiesce comes with ABSOLUTELY NO WARRANTY. See [LICENSE](LICENSE) for the
+  full terms.
 - **Support**: If Quiesce saved your pc from clutter free junks, optimize and boost performance, feel free to support the project:
 
 <a href="https://buymeacoffee.com/sibtainocn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
