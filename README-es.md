@@ -54,8 +54,8 @@ Para añadir un nuevo idioma, crea `locales/active.<code>.toml` (copia
 las claves tipadas, y `go run github.com/itskreisler/i18n-go/cmd/i18n validate -dir locales`
 para verificar que cada clave está traducida.
 
-Consulta la [guía de traducciones](docs/i18n.md) para instrucciones paso a
-paso sobre cómo añadir nuevas claves de traducción.
+Consulta la [guía de traducciones](docs/i18n-es.md) para instrucciones paso
+a paso sobre cómo añadir nuevas claves de traducción.
 
 ---
 
