@@ -1,5 +1,7 @@
 # Quiesce
 
+**English** | [Español](README-es.md)
+
 A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework - just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
 
 ---

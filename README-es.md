@@ -1,5 +1,7 @@
 # Quiesce
 
+[English](README.md) | **Español**
+
 Un limpiador del sistema y optimizador de RAM rápido y ligero para Windows. Un único ejecutable, cero instalación, sin frameworks GUI pesados: solo una interfaz de terminal limpia con 12 pasos de limpieza personalizables para liberar espacio en disco y acelerar tu PC de forma segura.
 
 ---
