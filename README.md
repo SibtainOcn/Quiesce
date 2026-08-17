@@ -54,6 +54,9 @@ To add a new language, create `locales/active.<code>.toml` (copy
 the typed keys, and `go run github.com/itskreisler/i18n-go/cmd/i18n validate -dir locales`
 to verify every key is translated.
 
+See the [translation guide](docs/i18n.md) for step-by-step instructions on
+adding new translation keys.
+
 ---
 
 ## How to Use
