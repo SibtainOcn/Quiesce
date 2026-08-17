@@ -22,6 +22,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"quiesce/locales"
 )
 
 type Config struct {
@@ -37,6 +39,10 @@ type Config struct {
 	RamOptimize   int
 	RecycleBin    int
 	DeepCleanup   int // AGGRESSIVE — never persisted, always starts OFF
+
+	// Language overrides the detected Windows display language ("en"/"es").
+	// Empty means auto-detect.
+	Language string
 
 	// --- RAM Optimization sub-options (only used when RamOptimize == 1) ---
 	// The first two are the original, safe behaviour and default ON.
@@ -66,6 +72,8 @@ func DefaultConfig() *Config {
 		RamPurgeStandby:    1,
 		RamFileCache:       0, // opt-in: drops kernel file cache
 		RamTrimWorkingSets: 0, // opt-in: aggressive, causes hard faults afterwards
+
+		Language: "", // empty = detect from Windows display language
 	}
 }
 
@@ -77,7 +85,7 @@ func LoadConfig(filePath string) (*Config, error) {
 		if os.IsNotExist(err) {
 			errSave := SaveConfig(filePath, cfg)
 			if errSave == nil {
-				fmt.Println("\n  \x1b[97m[NOTE]\x1b[0m Config created: " + filePath)
+				fmt.Printf("\n  \x1b[97m[NOTE]\x1b[0m %s\n", TD(locales.ConfigCreated, map[string]any{"Path": filePath}))
 			}
 			return cfg, nil
 		}
@@ -96,8 +104,9 @@ func LoadConfig(filePath string) (*Config, error) {
 			continue
 		}
 		key := strings.TrimSpace(parts[0])
-		val, parseErr := strconv.Atoi(strings.TrimSpace(parts[1]))
-		if parseErr != nil {
+		rawVal := strings.TrimSpace(parts[1])
+		val, parseErr := strconv.Atoi(rawVal)
+		if parseErr != nil && key != "LANGUAGE" {
 			continue
 		}
 
@@ -132,6 +141,8 @@ func LoadConfig(filePath string) (*Config, error) {
 			cfg.RamFileCache = val
 		case "RAM_TRIM_WORKING_SETS":
 			cfg.RamTrimWorkingSets = val
+		case "LANGUAGE":
+			cfg.Language = strings.ToLower(rawVal)
 		}
 	}
 
@@ -140,7 +151,7 @@ func LoadConfig(filePath string) (*Config, error) {
 
 func SaveConfig(filePath string, cfg *Config) error {
 	content := fmt.Sprintf(
-		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\n",
+		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\nLANGUAGE=%s\n",
 		cfg.WinTemp,
 		cfg.UserTemp,
 		cfg.Prefetch,
@@ -156,6 +167,7 @@ func SaveConfig(filePath string, cfg *Config) error {
 		cfg.RamPurgeStandby,
 		cfg.RamFileCache,
 		cfg.RamTrimWorkingSets,
+		cfg.Language,
 	)
 	return os.WriteFile(filePath, []byte(content), 0644)
 }

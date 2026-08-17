@@ -38,6 +38,22 @@ Every step can be customized in the menu settings, and your choices are saved au
 
 ---
 
+## Language / Internationalization
+
+Quiesce is internationalized (English and Spanish) using the local
+[`itskreisler/i18n-go`](../kreisler-i18n) library:
+
+- **Auto-detect**: the interface follows your Windows display language.
+- **Override**: add a `LANGUAGE=` line to `cleaner_config.dat` (next to
+  `qc.exe`) to force a language, e.g. `LANGUAGE=en` or `LANGUAGE=es`.
+
+To add a new language, create `locales/active.<code>.toml` (copy
+`active.en.toml` and translate it), then run `go generate ./...` to regenerate
+the typed keys, and `go run github.com/itskreisler/i18n-go/cmd/i18n validate -dir locales`
+to verify every key is translated.
+
+---
+
 ## How to Use
 
 Launch **`qc.exe`** as Administrator:

@@ -1,0 +1,358 @@
+# Español - traducciones de la interfaz de Quiesce.
+
+[about.gpl]
+other = "GPL-3.0-or-later - software libre, sin garantía"
+
+[about.compare]
+other = "Compara con la suma de verificación en {{.Repo}}/releases"
+
+[clean.cleanmgr_launch_failed]
+other = "Falló el lanzamiento de cleanmgr.exe: {{.Err}}"
+
+[clean.cleanmgr_ok]
+other = "cleanmgr.exe completado"
+
+[clean.cleanmgr_run]
+other = "Ejecutando: cleanmgr.exe /sagerun:99"
+
+[clean.cleanmgr_timeout]
+other = "cleanmgr.exe agotó el tiempo (puede seguir ejecutándose)"
+
+[clean.cleanmgr_wait]
+other = "Esperando a que termine el proceso en segundo plano de cleanmgr..."
+
+[clean.deep]
+other = "Limpieza profunda - AGRESIVA..."
+
+[clean.delivery_opt]
+other = "Limpiando caché de optimización de entrega..."
+
+[clean.dns]
+other = "Vaciando caché de DNS..."
+
+[clean.dns_ok]
+other = "Caché de DNS vaciada"
+
+[clean.dns_skip]
+other = "No se pudo vaciar la caché de DNS"
+
+[clean.done]
+other = "¡Hecho!"
+
+[clean.error_reports]
+other = "Limpiando errores de Windows..."
+
+[clean.installer_temp]
+other = "Limpiando Temp del Instalador..."
+
+[clean.partial_results]
+other = "Se mostrarán los resultados parciales."
+
+[clean.pipeline_crash]
+other = "El pipeline de limpieza falló: {{.Err}}"
+
+[clean.log_files]
+other = "Limpiando registros de Windows..."
+
+[clean.prefetch]
+other = "Limpiando carpeta Prefetch..."
+
+[clean.ram]
+other = "Optimizando RAM..."
+
+[clean.recycle]
+other = "Vaciando la Papelera..."
+
+[clean.recycle_ok_empty]
+other = "Papelera vaciada - ya estaba vacía"
+
+[clean.recycle_ok_freed]
+other = "Papelera vaciada - {{.Size}} liberados"
+
+[clean.recycle_skip]
+other = "No se pudo vaciar la Papelera"
+
+[clean.user_temp]
+other = "Limpiando carpeta Temp del usuario..."
+
+[clean.warn_cleanmgr_setup]
+other = "No se pudo configurar el registro para cleanmgr: {{.Err}}"
+
+[clean.win_temp]
+other = "Limpiando carpeta Temp de Windows..."
+
+[clean.win_update]
+other = "Limpiando caché de Windows Update..."
+
+[common.skipped]
+other = "OMITIDO"
+
+[config.created]
+other = "Configuración creada: {{.Path}}"
+
+[config.warning]
+other = "Aviso al cargar la configuración: {{.Err}}"
+
+[deep.completed]
+other = "completada"
+
+[deep.failed]
+other = "parcial/falló"
+
+[deep.run_once]
+other = "UNA VEZ"
+
+[done.title]
+other = "¡TODO LISTO - Optimización completada!"
+
+[elev.failed]
+other = "No se pudo elevar el proceso (código de error {{.Code}})."
+
+[elev.path_error]
+other = "Error al obtener la ruta del ejecutable: {{.Err}}"
+
+[elev.request]
+other = "Solicitando privilegios de administrador..."
+
+[fatal.unexpected]
+other = "Error inesperado: {{.Err}}"
+
+[help.help_flag]
+other = "Muestra esta ayuda"
+
+[help.no_flag]
+other = "Inicia el menú interactivo"
+
+[help.tagline]
+other = "Limpiador del sistema y optimizador de RAM para Windows"
+
+[help.usage]
+other = "Uso: {{.App}} [flag]"
+
+[help.version_flag]
+other = "Versión, autor, licencia y suma de verificación"
+
+[main.press_enter]
+other = "Pulsa ENTER para salir..."
+
+[menu.prompt]
+other = "Pulsa {{.Enter}} para Ejecutar  |  Pulsa {{.F}} para Configurar"
+
+[menu.this_will_clean]
+other = "Esto limpiará:"
+
+[ram.all_off]
+other = "Todas las sub-opciones de Optimización de RAM están OFF - nada que hacer"
+
+[ram.cache_done]
+other = "Caché de archivos del sistema vaciada"
+
+[ram.cache_fail]
+other = "No se pudo vaciar la caché de archivos del sistema - ejecuta como Administrador"
+
+[ram.cache_note]
+other = "(Eliminando datos en caché del kernel - seguro, solo caché)"
+
+[ram.cache_title]
+other = "Vaciando caché de archivos del sistema..."
+
+[ram.change]
+other = "Cambio de RAM: {{.MB}} MB (una app en segundo plano asignó memoria durante la limpieza)"
+
+[ram.change_status]
+other = "Estado: Intenta cerrar las apps en segundo plano y ejecuta de nuevo"
+
+[ram.drop]
+other = "Caída de uso: {{.Drop}}% ({{.Before}}% -> {{.After}}%)"
+
+[ram.flush_done]
+other = "Lista de páginas modificadas vaciada - NTSTATUS: {{.Status}}"
+
+[ram.flush_fail]
+other = "FlushModifiedList devolvió NTSTATUS: {{.Status}}"
+
+[ram.flush_note]
+other = "(Escribiendo páginas sucias a disco para que puedan liberarse)"
+
+[ram.flush_title]
+other = "Vaciando lista de páginas modificadas..."
+
+[ram.freed]
+other = "RAM liberada: {{.MB}} MB"
+
+[ram.op.file_cache]
+other = "caché de archivos"
+
+[ram.op.flush]
+other = "vaciado"
+
+[ram.op.standby]
+other = "reserva"
+
+[ram.op.trim]
+other = "recorte"
+
+[ram.priv_fail]
+other = "FALLO al habilitar el privilegio"
+
+[ram.priv_ok]
+other = "Privilegio habilitado correctamente"
+
+[ram.priv_step]
+other = "[Paso {{.Step}}/{{.Total}}] Habilitando SeProfileSingleProcessPrivilege..."
+
+[ram.results]
+other = "RESULTADOS DEL SISTEMA"
+
+[ram.standby_done]
+other = "Lista de reserva vaciada - NTSTATUS: {{.Status}}"
+
+[ram.standby_fail]
+other = "PurgeStandbyList devolvió NTSTATUS: {{.Status}}"
+
+[ram.standby_note]
+other = "(Liberando memoria en caché/reserva - esta es la operación principal)"
+
+[ram.standby_title]
+other = "Vaciando lista de reserva..."
+
+[ram.step_title]
+other = "[Paso {{.Step}}/{{.Total}}] {{.Title}}"
+
+[ram.success]
+other = "Estado: ÉXITO - la RAM se liberó de verdad"
+
+[ram.trim_done]
+other = "{{.Trimmed}} procesos recortados, {{.Skipped}} omitidos (protegidos/sin acceso)"
+
+[ram.trim_none]
+other = "No se recortó ningún proceso ({{.Skipped}} omitidos) - ejecuta como Administrador"
+
+[ram.trim_note]
+other = "(Moviendo memoria activa de apps al archivo de paginación - omite la app en primer plano)"
+
+[ram.trim_title]
+other = "Recortando conjuntos de trabajo de procesos..."
+
+[ram.zero]
+other = "RAM liberada: 0 MB (la lista de reserva ya estaba vacía)"
+
+[ram.zero_status]
+other = "Estado: Nada que liberar - es normal si se ejecutó recientemente"
+
+[settings.down]
+other = "Abajo"
+
+[settings.save]
+other = "Guardar"
+
+[settings.save_return]
+other = "Pulsa {{.E}} para Guardar y Volver"
+
+[settings.saved]
+other = "Configuración guardada."
+
+[settings.title]
+other = "CONFIGURAR OPCIONES DE LIMPIEZA"
+
+[settings.up]
+other = "Arriba"
+
+[stats.cpu]
+other = "CPU"
+
+[stats.mem]
+other = "MEMORIA"
+
+[step.deep]
+other = "Limpieza profunda"
+
+[step.delivery_opt]
+other = "Optimización de entrega"
+
+[step.dns]
+other = "Vaciar caché de DNS"
+
+[step.error_reports]
+other = "Errores de Windows"
+
+[step.installer_temp]
+other = "Temp del Instalador"
+
+[step.log_files]
+other = "Registros de Windows"
+
+[step.prefetch]
+other = "Carpeta Prefetch"
+
+[step.ram]
+other = "Optimización de RAM"
+
+[step.ram_file_cache]
+other = "Caché de archivos del sistema (caché de disco del kernel)"
+
+[step.ram_flush_modified]
+other = "Vaciar lista modificada (páginas sucias a disco)"
+
+[step.ram_purge_standby]
+other = "Vaciar lista de reserva (libera memoria caché)"
+
+[step.ram_trim_working_sets]
+other = "Recortar conjuntos de trabajo (memoria de apps, agresivo)"
+
+[step.recycle]
+other = "Vaciar Papelera"
+
+[step.user_temp]
+other = "Carpeta Temp del usuario"
+
+[step.win_temp]
+other = "Carpeta Temp de Windows"
+
+[step.win_update]
+other = "Caché de Windows Update"
+
+[summary.already_empty]
+other = "ya vacía"
+
+[summary.all_off]
+other = "todas las sub-opciones OFF"
+
+[summary.failed]
+other = "falló"
+
+[summary.flushed]
+other = "vaciada"
+
+[summary.freed]
+other = "{{.MB}} MB liberados ({{.Before}}% -> {{.After}}%, -{{.Drop}}%)"
+
+[summary.freed_size]
+other = "{{.Size}} liberados"
+
+[summary.items]
+other = "{{.Count}} elementos"
+
+[summary.negative]
+other = "{{.MB}} MB (una app en segundo plano asignó memoria)"
+
+[summary.priv_failed]
+other = "falló (sin privilegio)"
+
+[summary.ran]
+other = "ejecutado: {{.Ops}}"
+
+[summary.skipped]
+other = "Elementos omitidos (en uso/protegidos)"
+
+[summary.title]
+other = "RESUMEN DE LIMPIEZA"
+
+[summary.total]
+other = "Elementos limpiados en total"
+
+[summary.trim_detail]
+other = "[{{.Trimmed}} procesos recortados, {{.Skipped}} omitidos]"
+
+[summary.zero]
+other = "0 MB (ya óptimo)"

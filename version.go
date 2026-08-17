@@ -38,6 +38,8 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+
+	"quiesce/locales"
 )
 
 const (
@@ -60,7 +62,7 @@ const (
 // deliberately not recorded or shown - they add noise to every version check
 // and make otherwise identical builds look different.
 var (
-	Version = "2.3.0"
+	Version = "2.3.1"
 	Commit  = ""
 )
 
@@ -133,10 +135,10 @@ func PrintAbout() {
 	fmt.Println()
 	fmt.Printf("  %s v%s%s\n", AppName, Version, build)
 	fmt.Printf("  %s  -  %s\n", Author, Repo)
-	fmt.Println("  GPL-3.0-or-later - free software, with no warranty")
+	fmt.Printf("  %s\n", T(locales.AboutGpl))
 	fmt.Println()
 	fmt.Printf("  SHA-256  %s\n", SelfSHA256())
-	fmt.Printf("  Compare with the checksum on %s/releases\n", Repo)
+	fmt.Printf("  %s\n", TD(locales.AboutCompare, map[string]any{"Repo": Repo}))
 	fmt.Println()
 }
 
@@ -144,13 +146,13 @@ func PrintAbout() {
 // interface; these flags exist for identity checks and scripting.
 func PrintHelp() {
 	fmt.Println()
-	fmt.Printf("  %s v%s - Windows system cleaner and RAM optimizer\n", AppName, Version)
+	fmt.Printf("  %s v%s - %s\n", AppName, Version, T(locales.HelpTagline))
 	fmt.Println()
-	fmt.Printf("  Usage: %s [flag]\n", AppShort)
+	fmt.Printf("  %s\n", TD(locales.HelpUsage, map[string]any{"App": AppShort}))
 	fmt.Println()
-	fmt.Println("    (no flag)          Launch the interactive menu")
-	fmt.Println("    -v, --version      Version, author, license and checksum")
-	fmt.Println("    -h, --help         Show this help")
+	fmt.Printf("    %-22s%s\n", "(no flag)", T(locales.HelpNoFlag))
+	fmt.Printf("    %-22s%s\n", "-v, --version", T(locales.HelpVersionFlag))
+	fmt.Printf("    %-22s%s\n", "-h, --help", T(locales.HelpHelpFlag))
 	fmt.Println()
 }
 

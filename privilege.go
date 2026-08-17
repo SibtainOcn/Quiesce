@@ -23,6 +23,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"quiesce/locales"
 )
 
 func IsAdmin() bool {
@@ -57,10 +59,10 @@ func EnsureAdmin() {
 		return
 	}
 
-	fmt.Println("Requesting administrator privileges...")
+	fmt.Println(T(locales.ElevRequest))
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("Error obtaining executable path: %v\n", err)
+		fmt.Printf("%s\n", TD(locales.ElevPathError, map[string]any{"Err": err}))
 		os.Exit(1)
 	}
 
@@ -82,7 +84,7 @@ func EnsureAdmin() {
 	)
 
 	if ret <= 32 {
-		fmt.Printf("Failed to elevate process (error code %d).\n", ret)
+		fmt.Printf("%s\n", TD(locales.ElevFailed, map[string]any{"Code": ret}))
 	}
 	os.Exit(0)
 }

@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"quiesce/locales"
 )
 
 func main() {
@@ -29,19 +31,18 @@ func main() {
 	// so the user can read the error instead of the window vanishing.
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("\n\x1b[31m[FATAL]\x1b[0m Unexpected error: %v\n", r)
-			fmt.Print("Press ENTER to exit...")
+			fmt.Printf("\n\x1b[31m[FATAL]\x1b[0m %s\n", TD(locales.FatalUnexpected, map[string]any{"Err": r}))
+			fmt.Printf("  %s\n", T(locales.MainPressEnter))
 			bufio.NewReader(os.Stdin).ReadString('\n')
 			os.Exit(1)
 		}
 	}()
 
-	// Informational flags are handled BEFORE elevation: checking what a
-	// binary claims to be (--version prints author, repo, license and the
-	// executable's own SHA-256) should never require granting it Admin.
-	// EnsureAdmin relaunches without arguments, so a flag would be lost
-	// across the elevation anyway.
+	// The localizer is initialized before anything is printed so the CLI
+	// flags (--version/--help) are shown in the detected language too.
+	// It is re-initialized after the config loads if it overrides LANGUAGE.
 	EnableVirtualTerminalProcessing()
+	initLocalizer("")
 	if HandleCLIFlags(os.Args[1:]) {
 		return
 	}
@@ -49,7 +50,8 @@ func main() {
 	// Ensure Administrator privilege
 	EnsureAdmin()
 
-	// Enable ANSI terminal color support in Windows console
+	// Enable ANSI terminal color support in Windows console (the relaunched
+	// elevated process starts fresh, so this must run again)
 	EnableVirtualTerminalProcessing()
 
 	// Set a clean console window title instead of showing the exe's file path
@@ -68,7 +70,12 @@ func main() {
 	// Load configuration
 	cfg, err := LoadConfig(configFilePath)
 	if err != nil {
-		fmt.Printf("Warning loading config: %v\n", err)
+		fmt.Printf("  %s\n", TD(locales.ConfigWarning, map[string]any{"Err": err}))
+	}
+
+	// A LANGUAGE= line in the config overrides the detected system language.
+	if cfg.Language != "" {
+		initLocalizer(cfg.Language)
 	}
 
 	osP1, osP2 := GetOSVersionParts()
@@ -123,7 +130,7 @@ func main() {
 		// WaitForEnter flushes anything typed during the run first, so ENTER
 		// presses made while cleaning was in progress can't close the window
 		// before the summary has been read.
-		fmt.Print("Press ENTER to exit...")
+		fmt.Printf("  %s\n", T(locales.MainPressEnter))
 		WaitForEnter()
 		os.Exit(0)
 	}

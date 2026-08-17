@@ -25,6 +25,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"quiesce/locales"
 )
 
 var (
@@ -106,13 +108,13 @@ func StartLiveStatsRow(promptRow int) *liveStats {
 		// than a static line that a later tick paints over. Without this
 		// first paint the row would sit empty for a full second.
 		paint := func() {
-			stats := GetSystemStats()
-			line := fmt.Sprintf(
-				"  CPU : %s%d%%%s  -  MEMORY: %s%.2f/%.2f GB%s %s%d%%%s",
-				RED, stats.CpuLoad, RST,
-				RED, stats.UsedGB, stats.TotalGB, RST,
-				RED, stats.Pct, RST,
-			)
+		stats := GetSystemStats()
+		line := fmt.Sprintf(
+			"  %s : %s%d%%%s  -  %s: %s%.2f/%.2f GB%s %s%d%%%s",
+			T(locales.StatsCpu), RED, stats.CpuLoad, RST,
+			T(locales.StatsMem), RED, stats.UsedGB, stats.TotalGB, RST,
+			RED, stats.Pct, RST,
+		)
 
 			// Jump to the fixed stats row, clear only that line, print
 			// new content, then explicitly return the cursor to the
@@ -256,40 +258,54 @@ func WaitForEnter() {
 	}
 }
 
-func GetCfgDispName(index int) string {
+// topStepName returns the translated display name of a top-level cleaning
+// step (1..11). The padding is applied at the call site so translations of
+// any length keep the ON/OFF column aligned.
+func topStepName(index int) string {
 	switch index {
 	case 1:
-		return "[1]  Windows Temp folder     "
+		return T(locales.StepWinTemp)
 	case 2:
-		return "[2]  User Temp folder        "
+		return T(locales.StepUserTemp)
 	case 3:
-		return "[3]  Prefetch folder         "
+		return T(locales.StepPrefetch)
 	case 4:
-		return "[4]  Windows Error Reports   "
+		return T(locales.StepErrorReports)
 	case 5:
-		return "[5]  Delivery Optimization   "
+		return T(locales.StepDeliveryOpt)
 	case 6:
-		return "[6]  Windows Update Cache    "
+		return T(locales.StepWinUpdate)
 	case 7:
-		return "[7]  Windows Log Files       "
+		return T(locales.StepLogFiles)
 	case 8:
-		return "[8]  Windows Installer Temp  "
+		return T(locales.StepInstallerTemp)
 	case 9:
-		return "[9]  DNS Cache Flush         "
+		return T(locales.StepDns)
 	case 10:
-		return "[10] RAM Optimization        "
+		return T(locales.StepRam)
 	case 11:
-		return "[11] Empty Recycle Bin       "
+		return T(locales.StepRecycle)
+	default:
+		return ""
+	}
+}
+
+// GetCfgDispName returns the localized, padded display string for a config
+// index (1..11 top-level steps, 101-104 RAM sub-options).
+func GetCfgDispName(index int) string {
+	if index >= 1 && index <= 11 {
+		return fmt.Sprintf("[%d]  %-25s", index, topStepName(index))
+	}
 	// 101-104: RAM Optimization sub-options, shown indented under [10].
-	// All four strings are the same length so their ON/OFF column lines up.
+	switch index {
 	case 101:
-		return "  - Flush modified list  (dirty pages to disk)"
+		return "  - " + T(locales.StepRamFlushModified)
 	case 102:
-		return "  - Purge standby list   (frees cached memory)"
+		return "  - " + T(locales.StepRamPurgeStandby)
 	case 103:
-		return "  - System file cache    (kernel disk cache)  "
+		return "  - " + T(locales.StepRamFileCache)
 	case 104:
-		return "  - Trim working sets    (app memory, harsh)  "
+		return "  - " + T(locales.StepRamTrimWorkingSets)
 	default:
 		return ""
 	}
@@ -330,7 +346,7 @@ func DrawMainMenu(cfg *Config, osP1, osP2, host, user string) int {
 	pf("  %s%s%s%s%s\n", WHITE, osP1, RED, osP2, RST)
 	pln("+---------------------------------------+")
 	pln()
-	pf("%sThis will clean:%s\n", WHITE, RST)
+	pf("%s%s%s\n", WHITE, T(locales.MenuThisWillClean), RST)
 
 	for i := 1; i <= 11; i++ {
 		disp := GetCfgDispName(i)
@@ -355,14 +371,17 @@ func DrawMainMenu(cfg *Config, osP1, osP2, host, user string) int {
 
 	// Deep Cleanup — inline, right below Recycle Bin
 	if cfg.DeepCleanup == 1 {
-		pf("  [12] Deep Cleanup - %sRUN ONCE%s  : %s[ON]%s\n", RED, RST, RED, RST)
+		pf("  [12] %-17s - %s%s%s  : %s[ON]%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, RED, RST)
 	} else {
-		pf("  [12] Deep Cleanup - %sRUN ONCE%s  : %s[OFF]%s\n", RED, RST, CYAN, RST)
+		pf("  [12] %-17s - %s%s%s  : %s[OFF]%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, CYAN, RST)
 	}
 
 	pln()
 	pln("+---------------------------------------+")
-	pf("  Press %sENTER%s to Run  |  Press %sF%s to Configure\n", WHITE, RST, WHITE, RST)
+	pf("  %s\n", TD(locales.MenuPrompt, map[string]any{
+		"Enter": WHITE + "ENTER" + RST,
+		"F":     WHITE + "F" + RST,
+	}))
 	pln("+---------------------------------------+")
 	pln()
 
@@ -412,9 +431,14 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 		statsRowNum := row + 1
 		pln()
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
-		pf("%s         CONFIGURE CLEANING OPTIONS%s\n", WHITE, RST)
+		pf("%s%s%s\n", WHITE, T(locales.SettingsTitle), RST)
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
-		pf("  %sW%s = Up  |  %sS%s = Down  |  %sA%s = OFF  |  %sD%s = ON  |  %sE%s = Save\n", WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST)
+		pf("  %sW%s = %s  |  %sS%s = %s  |  %sA%s = OFF  |  %sD%s = ON  |  %sE%s = %s\n",
+			WHITE, RST, T(locales.SettingsUp),
+			WHITE, RST, T(locales.SettingsDown),
+			WHITE, RST,
+			WHITE, RST,
+			WHITE, RST, T(locales.SettingsSave))
 		pln()
 
 		if statsRowNum != liveStatsRow {
@@ -432,9 +456,9 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			// never persisted, so it's read and drawn separately.
 			if idx == 12 {
 				if cfg.DeepCleanup == 1 {
-					fmt.Printf("   [12] Deep Cleanup - %sRUN ONCE%s  : %s[ON]%s%s\n", RED, RST, RED, RST, a)
+					fmt.Printf("   [12] %-17s - %s%s%s  : %s[ON]%s%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, RED, RST, a)
 				} else {
-					fmt.Printf("   [12] Deep Cleanup - %sRUN ONCE%s  : %s[OFF]%s%s\n", RED, RST, CYAN, RST, a)
+					fmt.Printf("   [12] %-17s - %s%s%s  : %s[OFF]%s%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, CYAN, RST, a)
 				}
 				continue
 			}
@@ -449,7 +473,7 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 
 		pln()
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
-		pf("  Press %sE%s to Save & Return\n", WHITE, RST)
+		pf("  %s\n", TD(locales.SettingsSaveReturn, map[string]any{"E": WHITE + "E" + RST}))
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
 
 		// Prompt first, then the painter - the painter parks the cursor at
@@ -492,7 +516,7 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			// Save config — DeepCleanup is intentionally NOT saved
 			_ = SaveConfig(configFilePath, cfg)
 			fmt.Println()
-			fmt.Printf("  %s[SAVED]%s Configuration saved.\n", WHITE, RST)
+			fmt.Printf("  %s[SAVED]%s %s\n", WHITE, RST, T(locales.SettingsSaved))
 			time.Sleep(1 * time.Second)
 			ClearScreen()
 			return
@@ -503,92 +527,99 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 func PrintSummary(cfg *Config, results StepResults) {
 	fmt.Println()
 	fmt.Println("+---------------------------------------+")
-	fmt.Println("             CLEANING SUMMARY")
+	fmt.Printf("             %s\n", T(locales.SummaryTitle))
 	fmt.Println("+---------------------------------------+")
 	fmt.Println()
-	fmt.Printf("  %sTotal items cleaned : %d%s\n", RED, results.TotalDeleted, RST)
-	fmt.Printf("  Items skipped       : %d (in use/protected)\n", results.TotalFailed)
+	fmt.Printf("  %s%s : %d%s\n", RED, T(locales.SummaryTotal), results.TotalDeleted, RST)
+	fmt.Printf("  %s : %d\n", T(locales.SummarySkipped), results.TotalFailed)
 	fmt.Println()
 
 	steps := []struct {
 		idx  int
-		name string
 		cfg  int
 		isSp bool
 	}{
-		{1, "Windows Temp          ", cfg.WinTemp, false},
-		{2, "User Temp             ", cfg.UserTemp, false},
-		{3, "Prefetch              ", cfg.Prefetch, false},
-		{4, "Error Reports         ", cfg.ErrorReports, false},
-		{5, "Delivery Optimization ", cfg.DeliveryOpt, false},
-		{6, "Windows Update Cache  ", cfg.WinUpdate, false},
-		{7, "Windows Log Files     ", cfg.LogFiles, false},
-		{8, "Installer Temp        ", cfg.InstallerTemp, false},
-		{9, "DNS Cache             ", cfg.DnsFlush, true},
-		{10, "RAM Optimization      ", cfg.RamOptimize, true},
-		{11, "Recycle Bin           ", cfg.RecycleBin, true},
+		{1, cfg.WinTemp, false},
+		{2, cfg.UserTemp, false},
+		{3, cfg.Prefetch, false},
+		{4, cfg.ErrorReports, false},
+		{5, cfg.DeliveryOpt, false},
+		{6, cfg.WinUpdate, false},
+		{7, cfg.LogFiles, false},
+		{8, cfg.InstallerTemp, false},
+		{9, cfg.DnsFlush, true},
+		{10, cfg.RamOptimize, true},
+		{11, cfg.RecycleBin, true},
 	}
 
 	for _, s := range steps {
-		label := fmt.Sprintf("[%d]", s.idx)
+		name := topStepName(s.idx)
 		if s.cfg == 1 {
 			if !s.isSp {
-				fmt.Printf("  %-5s%s : %d items\n", label, s.name, results.StepCounts[s.idx])
+				fmt.Printf("  [%d]  %-25s : %s\n", s.idx, name,
+					TD(locales.SummaryItems, map[string]any{"Count": results.StepCounts[s.idx]}))
 			} else if s.idx == 9 {
-				fmt.Printf("  %-5s%s : flushed\n", label, s.name)
+				fmt.Printf("  [%d]  %-25s : %s\n", s.idx, name, T(locales.SummaryFlushed))
 			} else if s.idx == 10 {
 				r := results.Ram
 				switch {
 				case r.NothingToRun:
-					fmt.Printf("  %-5s%s : %sall sub-options OFF%s\n", label, s.name, CYAN, RST)
+					fmt.Printf("  [%d]  %-25s : %s%s%s\n", s.idx, name, CYAN, T(locales.SummaryAllOff), RST)
 				case r.PrivFailed:
-					fmt.Printf("  %-5s%s : %sfailed (no privilege)%s\n", label, s.name, CYAN, RST)
+					fmt.Printf("  [%d]  %-25s : %s%s%s\n", s.idx, name, CYAN, T(locales.SummaryPrivFailed), RST)
 				case r.FreedMB > 0:
-					fmt.Printf("  %-5s%s : %d MB freed (%.1f%% -> %.1f%%, -%.1f%%)\n",
-						label, s.name, r.FreedMB, r.BeforePct, r.AfterPct, r.DropPct)
+					fmt.Printf("  [%d]  %-25s : %s\n", s.idx, name, TD(locales.SummaryFreed, map[string]any{
+						"MB":     r.FreedMB,
+						"Before": fmt.Sprintf("%.1f", r.BeforePct),
+						"After":  fmt.Sprintf("%.1f", r.AfterPct),
+						"Drop":   fmt.Sprintf("%.1f", r.DropPct),
+					}))
 				case r.FreedMB == 0:
-					fmt.Printf("  %-5s%s : 0 MB (already optimal)\n", label, s.name)
+					fmt.Printf("  [%d]  %-25s : %s\n", s.idx, name, T(locales.SummaryZero))
 				default:
-					fmt.Printf("  %-5s%s : %s%d MB (background app allocated)%s\n", label, s.name, CYAN, r.FreedMB, RST)
+					fmt.Printf("  [%d]  %-25s : %s%s%s\n", s.idx, name, CYAN,
+						TD(locales.SummaryNegative, map[string]any{"MB": r.FreedMB}), RST)
 				}
 
 				// Attribute the number: which of the four operations ran,
 				// and how many processes the trim actually reached.
 				if !r.NothingToRun && !r.PrivFailed && len(r.OpsRun) > 0 {
-					detail := strings.Join(r.OpsRun, ", ")
+					detail := TD(locales.SummaryRan, map[string]any{"Ops": strings.Join(r.OpsRun, ", ")})
 					if r.Trimmed > 0 || r.TrimSkipped > 0 {
-						detail = fmt.Sprintf("%s [%d procs trimmed, %d skipped]", detail, r.Trimmed, r.TrimSkipped)
+						detail = fmt.Sprintf("%s %s", detail,
+							TD(locales.SummaryTrimDetail, map[string]any{"Trimmed": r.Trimmed, "Skipped": r.TrimSkipped}))
 					}
-					fmt.Printf("       %sran: %s%s\n", CYAN, detail, RST)
+					fmt.Printf("       %s%s%s\n", CYAN, detail, RST)
 				}
 			} else if s.idx == 11 {
 				if results.RecycleBinFailed {
-					fmt.Printf("  %-5s%s : %sfailed%s\n", label, s.name, CYAN, RST)
+					fmt.Printf("  [%d]  %-25s : %s%s%s\n", s.idx, name, CYAN, T(locales.SummaryFailed), RST)
 				} else if results.RecycleBinBytes > 0 {
-					fmt.Printf("  %-5s%s : %s freed\n", label, s.name, FormatBytesHuman(results.RecycleBinBytes))
+					fmt.Printf("  [%d]  %-25s : %s\n", s.idx, name,
+						TD(locales.SummaryFreedSize, map[string]any{"Size": FormatBytesHuman(results.RecycleBinBytes)}))
 				} else {
-					fmt.Printf("  %-5s%s : already empty\n", label, s.name)
+					fmt.Printf("  [%d]  %-25s : %s\n", s.idx, name, T(locales.SummaryAlreadyEmpty))
 				}
 			}
 		} else {
-			fmt.Printf("  %-5s%s : %sSKIPPED%s\n", label, s.name, CYAN, RST)
+			fmt.Printf("  [%d]  %-25s : %s%s%s\n", s.idx, name, CYAN, T(locales.CommonSkipped), RST)
 		}
 	}
 
 	// Deep Cleanup summary line
 	if results.DeepCleanupRan {
 		if results.DeepCleanupFailed {
-			fmt.Printf("  [12] Deep Cleanup - %sRUN ONCE%s : %spartial/failed%s\n", RED, RST, CYAN, RST)
+			fmt.Printf("  [12] %-17s - %s%s%s : %s%s%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, CYAN, T(locales.DeepFailed), RST)
 		} else {
-			fmt.Printf("  [12] Deep Cleanup - %sRUN ONCE%s : %scompleted%s\n", RED, RST, RED, RST)
+			fmt.Printf("  [12] %-17s - %s%s%s : %s%s%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, RED, T(locales.DeepCompleted), RST)
 		}
 	} else {
-		fmt.Printf("  [12] Deep Cleanup - %sRUN ONCE%s : %sSKIPPED%s\n", RED, RST, CYAN, RST)
+		fmt.Printf("  [12] %-17s - %s%s%s : %s%s%s\n", T(locales.StepDeep), RED, T(locales.DeepRunOnce), RST, CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	fmt.Println()
 	fmt.Println("+---------------------------------------+")
-	fmt.Println("  ALL DONE - Performance Boost Complete!")
+	fmt.Printf("  %s\n", T(locales.DoneTitle))
 	fmt.Println("+---------------------------------------+")
 	fmt.Println()
 	fmt.Printf("  %s\n", VersionLine())

@@ -1,0 +1,358 @@
+# English (source of truth for all Quiesce UI strings).
+
+[about.gpl]
+other = "GPL-3.0-or-later - free software, with no warranty"
+
+[about.compare]
+other = "Compare with the checksum on {{.Repo}}/releases"
+
+[clean.cleanmgr_launch_failed]
+other = "cleanmgr.exe launch failed: {{.Err}}"
+
+[clean.cleanmgr_ok]
+other = "cleanmgr.exe completed"
+
+[clean.cleanmgr_run]
+other = "Running: cleanmgr.exe /sagerun:99"
+
+[clean.cleanmgr_timeout]
+other = "cleanmgr.exe timed out (may still be running)"
+
+[clean.cleanmgr_wait]
+other = "Waiting for cleanmgr background worker to finish..."
+
+[clean.deep]
+other = "Deep Cleanup - AGGRESSIVE..."
+
+[clean.delivery_opt]
+other = "Cleaning Delivery Optimization Cache..."
+
+[clean.dns]
+other = "Flushing DNS Cache..."
+
+[clean.dns_ok]
+other = "DNS cache flushed"
+
+[clean.dns_skip]
+other = "Could not flush DNS"
+
+[clean.done]
+other = "Done!"
+
+[clean.error_reports]
+other = "Cleaning Windows Error Reports..."
+
+[clean.installer_temp]
+other = "Cleaning Windows Installer Temp..."
+
+[clean.partial_results]
+other = "Partial results will be shown."
+
+[clean.pipeline_crash]
+other = "Cleaning pipeline crashed: {{.Err}}"
+
+[clean.log_files]
+other = "Cleaning Windows Log Files..."
+
+[clean.prefetch]
+other = "Cleaning Prefetch folder..."
+
+[clean.ram]
+other = "Optimizing RAM..."
+
+[clean.recycle]
+other = "Emptying Recycle Bin..."
+
+[clean.recycle_ok_empty]
+other = "Recycle Bin emptied - already empty"
+
+[clean.recycle_ok_freed]
+other = "Recycle Bin emptied - {{.Size}} freed"
+
+[clean.recycle_skip]
+other = "Could not empty Recycle Bin"
+
+[clean.user_temp]
+other = "Cleaning User Temp folder..."
+
+[clean.warn_cleanmgr_setup]
+other = "Could not setup registry for cleanmgr: {{.Err}}"
+
+[clean.win_temp]
+other = "Cleaning Windows Temp folder..."
+
+[clean.win_update]
+other = "Cleaning Windows Update Cache..."
+
+[common.skipped]
+other = "SKIPPED"
+
+[config.created]
+other = "Config created: {{.Path}}"
+
+[config.warning]
+other = "Warning loading config: {{.Err}}"
+
+[deep.completed]
+other = "completed"
+
+[deep.failed]
+other = "partial/failed"
+
+[deep.run_once]
+other = "RUN ONCE"
+
+[done.title]
+other = "ALL DONE - Performance Boost Complete!"
+
+[elev.failed]
+other = "Failed to elevate process (error code {{.Code}})."
+
+[elev.path_error]
+other = "Error obtaining executable path: {{.Err}}"
+
+[elev.request]
+other = "Requesting administrator privileges..."
+
+[fatal.unexpected]
+other = "Unexpected error: {{.Err}}"
+
+[help.help_flag]
+other = "Show this help"
+
+[help.no_flag]
+other = "Launch the interactive menu"
+
+[help.tagline]
+other = "Windows system cleaner and RAM optimizer"
+
+[help.usage]
+other = "Usage: {{.App}} [flag]"
+
+[help.version_flag]
+other = "Version, author, license and checksum"
+
+[main.press_enter]
+other = "Press ENTER to exit..."
+
+[menu.prompt]
+other = "Press {{.Enter}} to Run  |  Press {{.F}} to Configure"
+
+[menu.this_will_clean]
+other = "This will clean:"
+
+[ram.all_off]
+other = "All RAM Optimization sub-options are OFF - nothing to do"
+
+[ram.cache_done]
+other = "System file cache flushed"
+
+[ram.cache_fail]
+other = "Could not flush system file cache - run as Administrator"
+
+[ram.cache_note]
+other = "(Dropping the kernel's cached file data - safe, cache only)"
+
+[ram.cache_title]
+other = "Flushing system file cache..."
+
+[ram.change]
+other = "RAM change: {{.MB}} MB (background app allocated during cleanup)"
+
+[ram.change_status]
+other = "Status: Try closing background apps and run again"
+
+[ram.drop]
+other = "Usage drop: {{.Drop}}% ({{.Before}}% -> {{.After}}%)"
+
+[ram.flush_done]
+other = "Modified page list flushed - NTSTATUS: {{.Status}}"
+
+[ram.flush_fail]
+other = "FlushModifiedList returned NTSTATUS: {{.Status}}"
+
+[ram.flush_note]
+other = "(Writing dirty pages to disk so they can be freed)"
+
+[ram.flush_title]
+other = "Flushing modified page list..."
+
+[ram.freed]
+other = "RAM freed: {{.MB}} MB"
+
+[ram.op.file_cache]
+other = "file cache"
+
+[ram.op.flush]
+other = "flush"
+
+[ram.op.standby]
+other = "standby"
+
+[ram.op.trim]
+other = "trim"
+
+[ram.priv_fail]
+other = "FAILED to enable privilege"
+
+[ram.priv_ok]
+other = "Privilege enabled successfully"
+
+[ram.priv_step]
+other = "[Step {{.Step}}/{{.Total}}] Enabling SeProfileSingleProcessPrivilege..."
+
+[ram.results]
+other = "SYSTEM RESULTS"
+
+[ram.standby_done]
+other = "Standby list purged - NTSTATUS: {{.Status}}"
+
+[ram.standby_fail]
+other = "PurgeStandbyList returned NTSTATUS: {{.Status}}"
+
+[ram.standby_note]
+other = "(Freeing cached/standby memory - this is the main operation)"
+
+[ram.standby_title]
+other = "Purging standby list..."
+
+[ram.step_title]
+other = "[Step {{.Step}}/{{.Total}}] {{.Title}}"
+
+[ram.success]
+other = "Status: SUCCESS - RAM was actually freed"
+
+[ram.trim_done]
+other = "{{.Trimmed}} processes trimmed, {{.Skipped}} skipped (protected/no access)"
+
+[ram.trim_none]
+other = "No processes trimmed ({{.Skipped}} skipped) - run as Administrator"
+
+[ram.trim_note]
+other = "(Paging out live app memory - skips the foreground app)"
+
+[ram.trim_title]
+other = "Trimming process working sets..."
+
+[ram.zero]
+other = "RAM freed: 0 MB (standby list was already empty)"
+
+[ram.zero_status]
+other = "Status: Nothing to free - this is normal if run recently"
+
+[settings.down]
+other = "Down"
+
+[settings.save]
+other = "Save"
+
+[settings.save_return]
+other = "Press {{.E}} to Save & Return"
+
+[settings.saved]
+other = "Configuration saved."
+
+[settings.title]
+other = "CONFIGURE CLEANING OPTIONS"
+
+[settings.up]
+other = "Up"
+
+[stats.cpu]
+other = "CPU"
+
+[stats.mem]
+other = "MEMORY"
+
+[step.deep]
+other = "Deep Cleanup"
+
+[step.delivery_opt]
+other = "Delivery Optimization"
+
+[step.dns]
+other = "DNS Cache Flush"
+
+[step.error_reports]
+other = "Windows Error Reports"
+
+[step.installer_temp]
+other = "Windows Installer Temp"
+
+[step.log_files]
+other = "Windows Log Files"
+
+[step.prefetch]
+other = "Prefetch folder"
+
+[step.ram]
+other = "RAM Optimization"
+
+[step.ram_file_cache]
+other = "System file cache    (kernel disk cache)"
+
+[step.ram_flush_modified]
+other = "Flush modified list  (dirty pages to disk)"
+
+[step.ram_purge_standby]
+other = "Purge standby list   (frees cached memory)"
+
+[step.ram_trim_working_sets]
+other = "Trim working sets    (app memory, harsh)"
+
+[step.recycle]
+other = "Empty Recycle Bin"
+
+[step.user_temp]
+other = "User Temp folder"
+
+[step.win_temp]
+other = "Windows Temp folder"
+
+[step.win_update]
+other = "Windows Update Cache"
+
+[summary.already_empty]
+other = "already empty"
+
+[summary.all_off]
+other = "all sub-options OFF"
+
+[summary.failed]
+other = "failed"
+
+[summary.flushed]
+other = "flushed"
+
+[summary.freed]
+other = "{{.MB}} MB freed ({{.Before}}% -> {{.After}}%, -{{.Drop}}%)"
+
+[summary.freed_size]
+other = "{{.Size}} freed"
+
+[summary.items]
+other = "{{.Count}} items"
+
+[summary.negative]
+other = "{{.MB}} MB (background app allocated)"
+
+[summary.priv_failed]
+other = "failed (no privilege)"
+
+[summary.ran]
+other = "ran: {{.Ops}}"
+
+[summary.skipped]
+other = "Items skipped (in use/protected)"
+
+[summary.title]
+other = "CLEANING SUMMARY"
+
+[summary.total]
+other = "Total items cleaned"
+
+[summary.trim_detail]
+other = "[{{.Trimmed}} procs trimmed, {{.Skipped}} skipped]"
+
+[summary.zero]
+other = "0 MB (already optimal)"

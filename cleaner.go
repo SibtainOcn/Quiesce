@@ -29,6 +29,8 @@ import (
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
+
+	"quiesce/locales"
 )
 
 type StepResults struct {
@@ -237,8 +239,8 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 	// so the summary can still be displayed.
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("\n\x1b[31m[ERROR]\x1b[0m Cleaning pipeline crashed: %v\n", r)
-			fmt.Println("Partial results will be shown.")
+			fmt.Printf("\n\x1b[31m[ERROR]\x1b[0m %s\n", TD(locales.CleanPipelineCrash, map[string]any{"Err": r}))
+			fmt.Println(T(locales.CleanPartialResults))
 		}
 	}()
 
@@ -251,163 +253,163 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 	// [1/12] Windows Temp folder
 	fmt.Println()
 	if cfg.WinTemp == 1 {
-		TypeLine("[1/12] Cleaning Windows Temp folder...", 0)
+		TypeLine(fmt.Sprintf("[1/12] %s", T(locales.CleanWinTemp)), 0)
 		fmt.Println("+---------------------------------------+")
 		winTempDir := filepath.Join(systemRoot, "Temp")
 		cleanDirContents(winTempDir, true, &results, 1)
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[1/12] Windows Temp folder           - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[1/12] %-25s - %s%s%s\n", topStepName(1), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [2/12] User Temp folder
 	fmt.Println()
 	if cfg.UserTemp == 1 {
-		TypeLine("[2/12] Cleaning User Temp folder...", 0)
+		TypeLine(fmt.Sprintf("[2/12] %s", T(locales.CleanUserTemp)), 0)
 		fmt.Println("+---------------------------------------+")
 		cleanDirContents(userTemp, true, &results, 2)
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[2/12] User Temp folder              - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[2/12] %-25s - %s%s%s\n", topStepName(2), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [3/12] Prefetch folder
 	fmt.Println()
 	if cfg.Prefetch == 1 {
-		TypeLine("[3/12] Cleaning Prefetch folder...", 0)
+		TypeLine(fmt.Sprintf("[3/12] %s", T(locales.CleanPrefetch)), 0)
 		fmt.Println("+---------------------------------------+")
 		prefetchDir := filepath.Join(systemRoot, "Prefetch")
 		cleanDirContents(prefetchDir, true, &results, 3)
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[3/12] Prefetch folder               - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[3/12] %-25s - %s%s%s\n", topStepName(3), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [4/12] Windows Error Reports
 	fmt.Println()
 	if cfg.ErrorReports == 1 {
-		TypeLine("[4/12] Cleaning Windows Error Reports...", 0)
+		TypeLine(fmt.Sprintf("[4/12] %s", T(locales.CleanErrorReports)), 0)
 		fmt.Println("+---------------------------------------+")
 		werDir := filepath.Join(programData, "Microsoft", "Windows", "WER")
 		cleanDirRecursiveFiles(werDir, true, &results, 4)
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[4/12] Windows Error Reports         - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[4/12] %-25s - %s%s%s\n", topStepName(4), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [5/12] Delivery Optimization Cache
 	fmt.Println()
 	if cfg.DeliveryOpt == 1 {
-		TypeLine("[5/12] Cleaning Delivery Optimization Cache...", 0)
+		TypeLine(fmt.Sprintf("[5/12] %s", T(locales.CleanDeliveryOpt)), 0)
 		fmt.Println("+---------------------------------------+")
 		stopService("DoSvc")
 		doDir := filepath.Join(systemRoot, "SoftwareDistribution", "DeliveryOptimization")
 		cleanDirRecursiveFiles(doDir, true, &results, 5)
 		startService("DoSvc")
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[5/12] Delivery Optimization Cache   - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[5/12] %-25s - %s%s%s\n", topStepName(5), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [6/12] Windows Update Cache
 	fmt.Println()
 	if cfg.WinUpdate == 1 {
-		TypeLine("[6/12] Cleaning Windows Update Cache...", 0)
+		TypeLine(fmt.Sprintf("[6/12] %s", T(locales.CleanWinUpdate)), 0)
 		fmt.Println("+---------------------------------------+")
 		stopService("wuauserv")
 		wuDir := filepath.Join(systemRoot, "SoftwareDistribution", "Download")
 		cleanDirRecursiveFiles(wuDir, true, &results, 6)
 		startService("wuauserv")
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[6/12] Windows Update Cache          - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[6/12] %-25s - %s%s%s\n", topStepName(6), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [7/12] Windows Log Files
 	fmt.Println()
 	if cfg.LogFiles == 1 {
-		TypeLine("[7/12] Cleaning Windows Log Files...", 0)
+		TypeLine(fmt.Sprintf("[7/12] %s", T(locales.CleanLogFiles)), 0)
 		fmt.Println("+---------------------------------------+")
 		logsDir := filepath.Join(systemRoot, "Logs")
 		cleanDirRecursiveFiles(logsDir, true, &results, 7)
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[7/12] Windows Log Files             - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[7/12] %-25s - %s%s%s\n", topStepName(7), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [8/12] Windows Installer Temp
 	fmt.Println()
 	if cfg.InstallerTemp == 1 {
-		TypeLine("[8/12] Cleaning Windows Installer Temp...", 0)
+		TypeLine(fmt.Sprintf("[8/12] %s", T(locales.CleanInstallerTemp)), 0)
 		fmt.Println("+---------------------------------------+")
 		stopService("msiserver")
 		instDir := filepath.Join(systemRoot, "Installer", "$PatchCache$")
 		cleanDirRecursiveFiles(instDir, true, &results, 8)
 		startService("msiserver")
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[8/12] Windows Installer Temp        - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[8/12] %-25s - %s%s%s\n", topStepName(8), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [9/12] DNS Cache
 	fmt.Println()
 	if cfg.DnsFlush == 1 {
-		TypeLine("[9/12] Flushing DNS Cache...", 0)
+		TypeLine(fmt.Sprintf("[9/12] %s", T(locales.CleanDns)), 0)
 		fmt.Println("+---------------------------------------+")
 		ok := FlushDNS()
 		if ok {
-			fmt.Println("\x1b[31m[OK]\x1b[0m DNS cache flushed")
+			fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", T(locales.CleanDnsOk))
 		} else {
-			fmt.Println("[SKIP] Could not flush DNS")
+			fmt.Printf("[SKIP] %s\n", T(locales.CleanDnsSkip))
 			results.DnsFailed = true
 		}
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[9/12] DNS Cache                     - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[9/12] %-25s - %s%s%s\n", topStepName(9), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [10/12] RAM Optimization
 	fmt.Println()
 	if cfg.RamOptimize == 1 {
-		TypeLine("[10/12] Optimizing RAM...", 0)
+		TypeLine(fmt.Sprintf("[10/12] %s", T(locales.CleanRam)), 0)
 		fmt.Println("+---------------------------------------+")
 		results.Ram = RunRamCleaner(cfg)
 		results.RamFreedMB = results.Ram.FreedMB
 	} else {
-		fmt.Println("[10/12] RAM Optimization             - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[10/12] %-25s - %s%s%s\n", topStepName(10), CYAN, T(locales.CommonSkipped), RST)
 	}
 
-	// [11/11] Recycle Bin (OFF by default - destructive/irreversible)
+	// [11/12] Recycle Bin (OFF by default - destructive/irreversible)
 	fmt.Println()
 	if cfg.RecycleBin == 1 {
-		TypeLine("[11/12] Emptying Recycle Bin...", 0)
+		TypeLine(fmt.Sprintf("[11/12] %s", T(locales.CleanRecycle)), 0)
 		fmt.Println("+---------------------------------------+")
 		bytesFreed, ok := EmptyRecycleBin()
 		if ok {
 			results.RecycleBinBytes = bytesFreed
 			if bytesFreed > 0 {
-				fmt.Printf("\x1b[31m[OK]\x1b[0m Recycle Bin emptied - %s freed\n", FormatBytesHuman(bytesFreed))
+				fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", TD(locales.CleanRecycleOkFreed, map[string]any{"Size": FormatBytesHuman(bytesFreed)}))
 			} else {
-				fmt.Println("\x1b[31m[OK]\x1b[0m Recycle Bin emptied - already empty")
+				fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", T(locales.CleanRecycleOkEmpty))
 			}
 		} else {
-			fmt.Println("[SKIP] Could not empty Recycle Bin")
+			fmt.Printf("[SKIP] %s\n", T(locales.CleanRecycleSkip))
 			results.RecycleBinFailed = true
 		}
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 	} else {
-		fmt.Println("[11/12] Recycle Bin                  - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[11/12] %-25s - %s%s%s\n", topStepName(11), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	// [12/12] Deep Cleanup - AGGRESSIVE — one-time opt-in, always resets
 	fmt.Println()
 	if cfg.DeepCleanup == 1 {
-		TypeLine("\x1b[31m[12/12] Deep Cleanup - AGGRESSIVE...\x1b[0m", 0)
+		TypeLine(fmt.Sprintf("\x1b[31m[12/12] %s\x1b[0m", T(locales.CleanDeep)), 0)
 		fmt.Println("+---------------------------------------+")
 
 		// Configure registry for completely silent, maximum cleaning
 		if err := setupSagerun99(); err != nil {
-			fmt.Printf("\x1b[36m[WARN]\x1b[0m Could not setup registry for cleanmgr: %v\n", err)
+			fmt.Printf("\x1b[36m[WARN]\x1b[0m %s\n", TD(locales.CleanWarnCleanmgrSetup, map[string]any{"Err": err}))
 		}
 
 		// --- Command 1: cleanmgr.exe /sagerun:99 ---
@@ -415,17 +417,17 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 		// (dismhost.exe / cleanmgr.exe worker) and the parent exits
 		// immediately with success, so cmd.Run() alone proves nothing.
 		// We launch it, then poll for the worker process to disappear.
-		fmt.Println("  Running: cleanmgr.exe /sagerun:99")
+		fmt.Printf("  %s\n", T(locales.CleanCleanmgrRun))
 		cmd1 := exec.Command("cleanmgr.exe", "/sagerun:99")
 		cmd1.Stdout = os.Stdout
 		cmd1.Stderr = os.Stderr
 		if err := cmd1.Run(); err != nil {
-			fmt.Printf("  \x1b[36m[WARN]\x1b[0m cleanmgr.exe launch failed: %v\n", err)
+			fmt.Printf("  \x1b[36m[WARN]\x1b[0m %s\n", TD(locales.CleanCleanmgrLaunchFailed, map[string]any{"Err": err}))
 			results.DeepCleanupFailed = true
 		} else {
 			// Wait for background cleanmgr worker to finish.
 			// Poll every 2 seconds for up to 5 minutes.
-			fmt.Println("  Waiting for cleanmgr background worker to finish...")
+			fmt.Printf("  %s\n", T(locales.CleanCleanmgrWait))
 			cleanmgrDone := false
 			for i := 0; i < 150; i++ {
 				time.Sleep(2 * time.Second)
@@ -438,20 +440,20 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 				}
 			}
 			if cleanmgrDone {
-				fmt.Println("  \x1b[31m[OK]\x1b[0m cleanmgr.exe completed")
+				fmt.Printf("  \x1b[31m[OK]\x1b[0m %s\n", T(locales.CleanCleanmgrOk))
 			} else {
-				fmt.Println("  \x1b[36m[WARN]\x1b[0m cleanmgr.exe timed out (may still be running)")
+				fmt.Printf("  \x1b[36m[WARN]\x1b[0m %s\n", T(locales.CleanCleanmgrTimeout))
 				results.DeepCleanupFailed = true
 			}
 		}
 
 		results.DeepCleanupRan = true
-		fmt.Println("Done!")
+		fmt.Println(T(locales.CleanDone))
 
 		// CRITICAL: always reset back to OFF after running
 		cfg.DeepCleanup = 0
 	} else {
-		fmt.Println("[12/12] Deep Cleanup - AGGRESSIVE    - \x1b[36mSKIPPED\x1b[0m")
+		fmt.Printf("[12/12] %-25s - %s%s%s\n", T(locales.CleanDeep), CYAN, T(locales.CommonSkipped), RST)
 	}
 
 	return results
