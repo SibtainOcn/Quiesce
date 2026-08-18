@@ -53,14 +53,14 @@ const (
 
 // Version and Commit are overridable at build time:
 //
-//	go build -ldflags "-X main.Version=2.3.0" -o qc.exe
+//	go build -ldflags "-X main.Version=2.4.0" -o qc.exe
 //
 // Version carries a real default so an unflagged `go build` still produces a
 // correctly-labelled binary rather than "dev". Build timestamps are
 // deliberately not recorded or shown - they add noise to every version check
 // and make otherwise identical builds look different.
 var (
-	Version = "2.3.0"
+	Version = "2.4.0"
 	Commit  = ""
 )
 
@@ -133,10 +133,10 @@ func PrintAbout() {
 	fmt.Println()
 	fmt.Printf("  %s v%s%s\n", AppName, Version, build)
 	fmt.Printf("  %s  -  %s\n", Author, Repo)
-	fmt.Println("  GPL-3.0-or-later - free software, with no warranty")
+	fmt.Printf("  %s\n", T("version.license"))
 	fmt.Println()
 	fmt.Printf("  SHA-256  %s\n", SelfSHA256())
-	fmt.Printf("  Compare with the checksum on %s/releases\n", Repo)
+	fmt.Printf("  %s\n", Tf("version.compare", Repo))
 	fmt.Println()
 }
 
@@ -144,13 +144,13 @@ func PrintAbout() {
 // interface; these flags exist for identity checks and scripting.
 func PrintHelp() {
 	fmt.Println()
-	fmt.Printf("  %s v%s - Windows system cleaner and RAM optimizer\n", AppName, Version)
+	fmt.Printf("  %s\n", Tf("help.tagline", AppName, Version))
 	fmt.Println()
-	fmt.Printf("  Usage: %s [flag]\n", AppShort)
+	fmt.Printf("  %s\n", Tf("help.usage", AppShort))
 	fmt.Println()
-	fmt.Println("    (no flag)          Launch the interactive menu")
-	fmt.Println("    -v, --version      Version, author, license and checksum")
-	fmt.Println("    -h, --help         Show this help")
+	fmt.Printf("    %s\n", T("help.no_flag"))
+	fmt.Printf("    %s\n", T("help.version"))
+	fmt.Printf("    %s\n", T("help.help"))
 	fmt.Println()
 }
 

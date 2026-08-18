@@ -34,7 +34,11 @@ var (
 	procSetConsoleTitle = modkernel32Title.NewProc("SetConsoleTitleW")
 
 	procFlushConsoleInputBuffer = modkernel32Title.NewProc("FlushConsoleInputBuffer")
+	procSetConsoleOutputCP      = modkernel32Title.NewProc("SetConsoleOutputCP")
 )
+
+// CP_UTF8 is the Windows code page identifier for UTF-8.
+const CP_UTF8 = 65001
 
 const (
 	RED    = "\x1b[31m"
@@ -108,7 +112,7 @@ func StartLiveStatsRow(promptRow int) *liveStats {
 		paint := func() {
 			stats := GetSystemStats()
 			line := fmt.Sprintf(
-				"  CPU : %s%d%%%s  -  MEMORY: %s%.2f/%.2f GB%s %s%d%%%s",
+				"  "+T("menu.cpu")+" : %s%d%%%s  -  "+T("menu.memory")+": %s%.2f/%.2f GB%s %s%d%%%s",
 				RED, stats.CpuLoad, RST,
 				RED, stats.UsedGB, stats.TotalGB, RST,
 				RED, stats.Pct, RST,
@@ -159,6 +163,24 @@ func StopLiveStatsRow(ls *liveStats) {
 	}
 	close(ls.stop)
 	<-ls.done
+}
+
+// EnableUTF8Console switches the console's output code page to UTF-8.
+//
+// Go source and therefore every translated string is UTF-8, but a Windows
+// console defaults to a legacy OEM code page (437/850/852...) that has no
+// idea what to do with multi-byte sequences. Without this, Spanish accents
+// and inverted punctuation render as mojibake ("OptimizaciÃ³n"), which is why
+// translations must NOT work around the problem by stripping accents.
+//
+// Failure is ignored: on the rare console where this is refused, output
+// degrades to garbled accents rather than the app refusing to start. The box
+// drawing and menu keys are plain ASCII either way.
+func EnableUTF8Console() {
+	if procSetConsoleOutputCP.Find() != nil {
+		return
+	}
+	procSetConsoleOutputCP.Call(uintptr(CP_UTF8))
 }
 
 func EnableVirtualTerminalProcessing() {
@@ -256,48 +278,136 @@ func WaitForEnter() {
 	}
 }
 
-func GetCfgDispName(index int) string {
-	switch index {
-	case 1:
-		return "[1]  Windows Temp folder     "
-	case 2:
-		return "[2]  User Temp folder        "
-	case 3:
-		return "[3]  Prefetch folder         "
-	case 4:
-		return "[4]  Windows Error Reports   "
-	case 5:
-		return "[5]  Delivery Optimization   "
-	case 6:
-		return "[6]  Windows Update Cache    "
-	case 7:
-		return "[7]  Windows Log Files       "
-	case 8:
-		return "[8]  Windows Installer Temp  "
-	case 9:
-		return "[9]  DNS Cache Flush         "
-	case 10:
-		return "[10] RAM Optimization        "
-	case 11:
-		return "[11] Empty Recycle Bin       "
-	// 101-104: RAM Optimization sub-options, shown indented under [10].
-	// All four strings are the same length so their ON/OFF column lines up.
-	case 101:
-		return "  - Flush modified list  (dirty pages to disk)"
-	case 102:
-		return "  - Purge standby list   (frees cached memory)"
-	case 103:
-		return "  - System file cache    (kernel disk cache)  "
-	case 104:
-		return "  - Trim working sets    (app memory, harsh)  "
-	default:
-		return ""
-	}
-}
+// mainStepIndices are the top-level cleaning steps in display order. Step 12
+// (Deep Cleanup) is included for label/width purposes even though its toggle
+// lives outside Config's GetVal/SetVal.
+var mainStepIndices = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
 // ramSubOptions are the config indices of the RAM Optimization sub-toggles,
 // in display order.
 var ramSubOptions = []int{101, 102, 103, 104}
+
+// stepLabel builds the label for a top-level step in two forms: the plain
+// text, used for width and padding math, and the colored text actually
+// printed. They differ only for Deep Cleanup, whose "RUN ONCE" tag is red -
+// ANSI escapes have zero visible width but do count toward len(), so padding
+// must always be measured on the plain form or the column drifts.
+func stepLabel(index int) (plain, colored string) {
+	num := fmt.Sprintf("[%d]", index)
+	name := T(fmt.Sprintf("step.%d.name", index))
+
+	if index == 12 {
+		tag := T("step.12.tag")
+		plain = fmt.Sprintf("%-5s%s - %s", num, name, tag)
+		colored = fmt.Sprintf("%-5s%s - %s%s%s", num, name, RED, tag, RST)
+		return plain, colored
+	}
+
+	plain = fmt.Sprintf("%-5s%s", num, name)
+	return plain, plain
+}
+
+// subLabel builds an indented RAM sub-option label: "  - <name> (<note>)".
+// The name is padded to the widest name in the group so every "(" lines up,
+// whatever the language.
+func subLabel(index int) string {
+	w := maxKeyWidth(
+		"sub.101.name", "sub.102.name", "sub.103.name", "sub.104.name",
+	)
+	name := padRight(T(fmt.Sprintf("sub.%d.name", index)), w)
+	return fmt.Sprintf("  - %s (%s)", name, T(fmt.Sprintf("sub.%d.note", index)))
+}
+
+// mainLabelWidth and subLabelWidth give each group its own ON/OFF column,
+// matching the original layout where the indented sub-options sit further
+// right than the numbered steps. Widths are measured, not typed, so a longer
+// translation shifts the column instead of breaking the alignment.
+func mainLabelWidth() int {
+	w := 0
+	for _, i := range mainStepIndices {
+		plain, _ := stepLabel(i)
+		w = max(w, len([]rune(plain)))
+	}
+	return w
+}
+
+func subLabelWidth() int {
+	w := 0
+	for _, i := range ramSubOptions {
+		w = max(w, len([]rune(subLabel(i))))
+	}
+	return w
+}
+
+// GetCfgDispName returns the display label for a config index, already
+// padded so the ON/OFF column that follows lines up with its group.
+func GetCfgDispName(index int) string {
+	if index >= 101 {
+		return padRight(subLabel(index), subLabelWidth())
+	}
+	if index < 1 || index > 12 {
+		return ""
+	}
+	plain, colored := stepLabel(index)
+	if pad := mainLabelWidth() - len([]rune(plain)); pad > 0 {
+		colored += strings.Repeat(" ", pad)
+	}
+	return colored
+}
+
+// StepHeader prints the "[n/12] <action>..." banner shown while a step runs.
+// Deep Cleanup (12) is printed in red, as it always was, because it is the
+// one destructive step.
+func StepHeader(idx int) {
+	head := fmt.Sprintf("[%d/12] %s", idx, T(fmt.Sprintf("step.%d.action", idx)))
+	if idx == 12 {
+		head = RED + head + RST
+	}
+	TypeLine(head, 0)
+}
+
+// StepSkipped prints the one-line "[n/12] <name> - SKIPPED" notice for a step
+// that is switched off. The label is padded to the widest "[n/12] <name>" in
+// the current language so every dash lines up, which is what the typed
+// trailing spaces in the original English strings were doing by hand.
+func StepSkipped(idx int) {
+	head := func(i int) string {
+		return fmt.Sprintf("[%d/12] %s", i, T(fmt.Sprintf("step.%d.name", i)))
+	}
+	w := 0
+	for i := 1; i <= 12; i++ {
+		w = max(w, len([]rune(head(i))))
+	}
+	fmt.Printf("%s - %s%s%s\n", padRight(head(idx), w), CYAN, T("common.skipped"), RST)
+}
+
+// selectedMark is the tick shown beside the active language. The console is
+// switched to UTF-8 at startup, so this renders on Windows Terminal and
+// modern conhost; it is two columns wide to match the blank alternative.
+const selectedMark = "✓ "
+
+// boxWidth is the visible width of the "+---...---+" rules used as screen
+// headers, including both "+" characters.
+const boxWidth = 41
+
+// centerInBox pads a heading with leading spaces so it sits centered under
+// the box rule. Headings used to carry hand-typed indentation, which only
+// looked centered for the exact English wording.
+func centerInBox(s string) string {
+	n := len([]rune(s))
+	if n >= boxWidth {
+		return s
+	}
+	return strings.Repeat(" ", (boxWidth-n)/2) + s
+}
+
+// RenderToggle formats a step's state as a colored [ON] / [OFF] marker.
+func RenderToggle(on bool) string {
+	if on {
+		return fmt.Sprintf("%s[%s]%s", RED, T("common.on"), RST)
+	}
+	return fmt.Sprintf("%s[%s]%s", CYAN, T("common.off"), RST)
+}
 
 // DrawMainMenu prints the main menu and returns the screen row number
 // where the "  > " input prompt will be printed immediately after this
@@ -330,39 +440,26 @@ func DrawMainMenu(cfg *Config, osP1, osP2, host, user string) int {
 	pf("  %s%s%s%s%s\n", WHITE, osP1, RED, osP2, RST)
 	pln("+---------------------------------------+")
 	pln()
-	pf("%sThis will clean:%s\n", WHITE, RST)
+	pf("%s%s%s\n", WHITE, T("menu.will_clean"), RST)
 
 	for i := 1; i <= 11; i++ {
-		disp := GetCfgDispName(i)
 		val := cfg.GetVal(i)
-		if val == 1 {
-			pf("  %s : %s[ON]%s\n", disp, RED, RST)
-		} else {
-			pf("  %s : %s[OFF]%s\n", disp, CYAN, RST)
-		}
+		pf("  %s : %s\n", GetCfgDispName(i), RenderToggle(val == 1))
 
 		// Show which RAM operations will actually run, indented under [10].
 		if i == 10 && val == 1 {
 			for _, sub := range ramSubOptions {
-				if cfg.GetVal(sub) == 1 {
-					pf("  %s : %s[ON]%s\n", GetCfgDispName(sub), RED, RST)
-				} else {
-					pf("  %s : %s[OFF]%s\n", GetCfgDispName(sub), CYAN, RST)
-				}
+				pf("  %s : %s\n", GetCfgDispName(sub), RenderToggle(cfg.GetVal(sub) == 1))
 			}
 		}
 	}
 
 	// Deep Cleanup — inline, right below Recycle Bin
-	if cfg.DeepCleanup == 1 {
-		pf("  [12] Deep Cleanup - %sRUN ONCE%s  : %s[ON]%s\n", RED, RST, RED, RST)
-	} else {
-		pf("  [12] Deep Cleanup - %sRUN ONCE%s  : %s[OFF]%s\n", RED, RST, CYAN, RST)
-	}
+	pf("  %s : %s\n", GetCfgDispName(12), RenderToggle(cfg.DeepCleanup == 1))
 
 	pln()
 	pln("+---------------------------------------+")
-	pf("  Press %sENTER%s to Run  |  Press %sF%s to Configure\n", WHITE, RST, WHITE, RST)
+	pf("  %s\n", Tf("menu.hint", WHITE, RST, WHITE, RST))
 	pln("+---------------------------------------+")
 	pln()
 
@@ -412,9 +509,9 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 		statsRowNum := row + 1
 		pln()
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
-		pf("%s         CONFIGURE CLEANING OPTIONS%s\n", WHITE, RST)
+		pf("%s%s%s\n", WHITE, centerInBox(T("settings.title")), RST)
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
-		pf("  %sW%s = Up  |  %sS%s = Down  |  %sA%s = OFF  |  %sD%s = ON  |  %sE%s = Save\n", WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST)
+		pf("  %s\n", Tf("settings.keys", WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST, WHITE, RST))
 		pln()
 
 		if statsRowNum != liveStatsRow {
@@ -429,27 +526,19 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			}
 
 			// Deep Cleanup (12) isn't part of Config's GetVal/SetVal - it is
-			// never persisted, so it's read and drawn separately.
+			// never persisted, so its state is read separately. Its label
+			// still comes from GetCfgDispName so it shares the same measured
+			// column as every other step.
+			on := cfg.GetVal(idx) == 1
 			if idx == 12 {
-				if cfg.DeepCleanup == 1 {
-					fmt.Printf("   [12] Deep Cleanup - %sRUN ONCE%s  : %s[ON]%s%s\n", RED, RST, RED, RST, a)
-				} else {
-					fmt.Printf("   [12] Deep Cleanup - %sRUN ONCE%s  : %s[OFF]%s%s\n", RED, RST, CYAN, RST, a)
-				}
-				continue
+				on = cfg.DeepCleanup == 1
 			}
-
-			disp := GetCfgDispName(idx)
-			if cfg.GetVal(idx) == 1 {
-				fmt.Printf("   %s : %s[ON]%s%s\n", disp, RED, RST, a)
-			} else {
-				fmt.Printf("   %s : %s[OFF]%s%s\n", disp, CYAN, RST, a)
-			}
+			fmt.Printf("   %s : %s%s\n", GetCfgDispName(idx), RenderToggle(on), a)
 		}
 
 		pln()
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
-		pf("  Press %sE%s to Save & Return\n", WHITE, RST)
+		pf("  %s\n", Tf("settings.save_hint", WHITE, RST))
 		pf("%s+---------------------------------------+%s\n", WHITE, RST)
 
 		// Prompt first, then the painter - the painter parks the cursor at
@@ -488,11 +577,105 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			} else {
 				cfg.SetVal(entries[sel], 1)
 			}
+		case "l":
+			// The picker redraws this screen in the new language on return,
+			// because the loop repaints from scratch every iteration.
+			RunLanguageScreen(cfg, configFilePath)
 		case "e":
 			// Save config — DeepCleanup is intentionally NOT saved
 			_ = SaveConfig(configFilePath, cfg)
 			fmt.Println()
-			fmt.Printf("  %s[SAVED]%s Configuration saved.\n", WHITE, RST)
+			fmt.Printf("  %s[SAVED]%s %s\n", WHITE, RST, T("settings.saved"))
+			time.Sleep(1 * time.Second)
+			ClearScreen()
+			return
+		}
+	}
+}
+
+// RunLanguageScreen shows the language picker reached with L from the
+// settings screen. The user presses the number next to a language to switch
+// to it, and E to save and go back.
+//
+// The switch is applied immediately rather than on save, so the list itself
+// redraws in the chosen language - that is the fastest way for someone who
+// picked the wrong entry to realise it and pick again.
+func RunLanguageScreen(cfg *Config, configFilePath string) {
+	codes := AvailableLanguages()
+
+	for {
+		row := 0
+		pln := func(a ...interface{}) {
+			fmt.Println(a...)
+			row++
+		}
+		pf := func(format string, a ...interface{}) {
+			fmt.Printf(format, a...)
+			row++
+		}
+
+		ClearScreen()
+		pln()
+		// Reserved (empty) stats row, painted live - same position as the
+		// main menu and the settings screen.
+		statsRowNum := row + 1
+		pln()
+		pf("%s+---------------------------------------+%s\n", WHITE, RST)
+		pf("%s%s%s\n", WHITE, centerInBox(T("language.title")), RST)
+		pf("%s+---------------------------------------+%s\n", WHITE, RST)
+		pf("  %s\n", Tf("language.keys", WHITE, RST, WHITE, RST))
+		pln()
+
+		if statsRowNum != liveStatsRow {
+			pf("\x1b[33m[WARN]\x1b[0m liveStatsRow constant (%d) doesn't match actual row (%d). Update liveStatsRow in ui.go.\n", liveStatsRow, statsRowNum)
+		}
+
+		// Names are padded to the widest so the tick column lines up.
+		nameW := 0
+		for _, c := range codes {
+			nameW = max(nameW, len([]rune(LanguageDisplayName(c))))
+		}
+
+		for i, c := range codes {
+			name := padRight(LanguageDisplayName(c), nameW)
+			mark := "  "
+			if c == ActiveLanguage() {
+				mark = selectedMark
+			}
+			pf("   [%d] %s   %s%s%s\n", i+1, name, RED, mark, RST)
+		}
+
+		pln()
+		pf("%s+---------------------------------------+%s\n", WHITE, RST)
+		pf("  %s\n", Tf("language.save_hint", WHITE, RST))
+		pf("%s+---------------------------------------+%s\n", WHITE, RST)
+
+		// Prompt first, then the painter - the painter parks the cursor at
+		// the prompt's column, so the prompt has to already be on screen.
+		fmt.Print("  > ")
+		statsStop := StartLiveStatsRow(row + 1)
+
+		ch := ReadSingleKey()
+
+		StopLiveStatsRow(statsStop)
+
+		// Digits select a language by position. Anything out of range is
+		// ignored rather than treated as an error.
+		if ch >= '1' && ch <= '9' {
+			if idx := int(ch - '1'); idx < len(codes) {
+				SetLanguage(codes[idx])
+				cfg.Language = codes[idx]
+			}
+			continue
+		}
+
+		if strings.ToLower(string(ch)) == "e" {
+			// Saving here as well as on the settings screen means a language
+			// picked and confirmed with E is never lost, whichever way the
+			// user leaves the settings screen afterwards.
+			_ = SaveConfig(configFilePath, cfg)
+			fmt.Println()
+			fmt.Printf("  %s[SAVED]%s %s\n", WHITE, RST, T("settings.saved"))
 			time.Sleep(1 * time.Second)
 			ClearScreen()
 			return
@@ -503,92 +686,120 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 func PrintSummary(cfg *Config, results StepResults) {
 	fmt.Println()
 	fmt.Println("+---------------------------------------+")
-	fmt.Println("             CLEANING SUMMARY")
+	fmt.Println(centerInBox(T("summary.title")))
 	fmt.Println("+---------------------------------------+")
 	fmt.Println()
-	fmt.Printf("  %sTotal items cleaned : %d%s\n", RED, results.TotalDeleted, RST)
-	fmt.Printf("  Items skipped       : %d (in use/protected)\n", results.TotalFailed)
+	fmt.Printf("  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
+	fmt.Printf("  %s\n", Tf("summary.skipped", results.TotalFailed))
 	fmt.Println()
+
+	// Summary labels are padded to the widest translated label rather than
+	// carrying typed trailing spaces, so the ":" column holds in any language.
+	// Deep Cleanup's row carries its "RUN ONCE" tag inline, making it the
+	// longest label, so it takes part in the width measurement too - it used
+	// to be printed with hand-typed spacing and sat one column off even in
+	// English.
+	deepPlain := fmt.Sprintf("%s - %s", T("step.12.short"), T("step.12.tag"))
+
+	shortKeys := make([]string, 0, 11)
+	for i := 1; i <= 11; i++ {
+		shortKeys = append(shortKeys, fmt.Sprintf("step.%d.short", i))
+	}
+	nameW := max(maxKeyWidth(shortKeys...), len([]rune(deepPlain)))
+
+	// line prints one summary row: "  [n] <label> : <value>".
+	line := func(idx int, value string) {
+		name := padRight(T(fmt.Sprintf("step.%d.short", idx)), nameW)
+		fmt.Printf("  %-5s%s : %s\n", fmt.Sprintf("[%d]", idx), name, value)
+	}
+	dim := func(s string) string { return CYAN + s + RST }
 
 	steps := []struct {
 		idx  int
-		name string
 		cfg  int
 		isSp bool
 	}{
-		{1, "Windows Temp          ", cfg.WinTemp, false},
-		{2, "User Temp             ", cfg.UserTemp, false},
-		{3, "Prefetch              ", cfg.Prefetch, false},
-		{4, "Error Reports         ", cfg.ErrorReports, false},
-		{5, "Delivery Optimization ", cfg.DeliveryOpt, false},
-		{6, "Windows Update Cache  ", cfg.WinUpdate, false},
-		{7, "Windows Log Files     ", cfg.LogFiles, false},
-		{8, "Installer Temp        ", cfg.InstallerTemp, false},
-		{9, "DNS Cache             ", cfg.DnsFlush, true},
-		{10, "RAM Optimization      ", cfg.RamOptimize, true},
-		{11, "Recycle Bin           ", cfg.RecycleBin, true},
+		{1, cfg.WinTemp, false},
+		{2, cfg.UserTemp, false},
+		{3, cfg.Prefetch, false},
+		{4, cfg.ErrorReports, false},
+		{5, cfg.DeliveryOpt, false},
+		{6, cfg.WinUpdate, false},
+		{7, cfg.LogFiles, false},
+		{8, cfg.InstallerTemp, false},
+		{9, cfg.DnsFlush, true},
+		{10, cfg.RamOptimize, true},
+		{11, cfg.RecycleBin, true},
 	}
 
 	for _, s := range steps {
-		label := fmt.Sprintf("[%d]", s.idx)
-		if s.cfg == 1 {
-			if !s.isSp {
-				fmt.Printf("  %-5s%s : %d items\n", label, s.name, results.StepCounts[s.idx])
-			} else if s.idx == 9 {
-				fmt.Printf("  %-5s%s : flushed\n", label, s.name)
-			} else if s.idx == 10 {
-				r := results.Ram
-				switch {
-				case r.NothingToRun:
-					fmt.Printf("  %-5s%s : %sall sub-options OFF%s\n", label, s.name, CYAN, RST)
-				case r.PrivFailed:
-					fmt.Printf("  %-5s%s : %sfailed (no privilege)%s\n", label, s.name, CYAN, RST)
-				case r.FreedMB > 0:
-					fmt.Printf("  %-5s%s : %d MB freed (%.1f%% -> %.1f%%, -%.1f%%)\n",
-						label, s.name, r.FreedMB, r.BeforePct, r.AfterPct, r.DropPct)
-				case r.FreedMB == 0:
-					fmt.Printf("  %-5s%s : 0 MB (already optimal)\n", label, s.name)
-				default:
-					fmt.Printf("  %-5s%s : %s%d MB (background app allocated)%s\n", label, s.name, CYAN, r.FreedMB, RST)
-				}
+		if s.cfg != 1 {
+			line(s.idx, dim(T("common.skipped")))
+			continue
+		}
 
-				// Attribute the number: which of the four operations ran,
-				// and how many processes the trim actually reached.
-				if !r.NothingToRun && !r.PrivFailed && len(r.OpsRun) > 0 {
-					detail := strings.Join(r.OpsRun, ", ")
-					if r.Trimmed > 0 || r.TrimSkipped > 0 {
-						detail = fmt.Sprintf("%s [%d procs trimmed, %d skipped]", detail, r.Trimmed, r.TrimSkipped)
-					}
-					fmt.Printf("       %sran: %s%s\n", CYAN, detail, RST)
-				}
-			} else if s.idx == 11 {
-				if results.RecycleBinFailed {
-					fmt.Printf("  %-5s%s : %sfailed%s\n", label, s.name, CYAN, RST)
-				} else if results.RecycleBinBytes > 0 {
-					fmt.Printf("  %-5s%s : %s freed\n", label, s.name, FormatBytesHuman(results.RecycleBinBytes))
-				} else {
-					fmt.Printf("  %-5s%s : already empty\n", label, s.name)
-				}
+		switch {
+		case !s.isSp:
+			line(s.idx, Tf("summary.items", results.StepCounts[s.idx]))
+
+		case s.idx == 9:
+			line(s.idx, T("summary.flushed"))
+
+		case s.idx == 10:
+			r := results.Ram
+			switch {
+			case r.NothingToRun:
+				line(s.idx, dim(T("summary.subs_off")))
+			case r.PrivFailed:
+				line(s.idx, dim(T("summary.no_priv")))
+			case r.FreedMB > 0:
+				line(s.idx, Tf("summary.ram_freed", r.FreedMB, r.BeforePct, r.AfterPct, r.DropPct))
+			case r.FreedMB == 0:
+				line(s.idx, T("summary.ram_zero"))
+			default:
+				line(s.idx, dim(Tf("summary.ram_neg", r.FreedMB)))
 			}
-		} else {
-			fmt.Printf("  %-5s%s : %sSKIPPED%s\n", label, s.name, CYAN, RST)
+
+			// Attribute the number: which of the four operations ran, and
+			// how many processes the trim actually reached.
+			if !r.NothingToRun && !r.PrivFailed && len(r.OpsRun) > 0 {
+				detail := strings.Join(r.OpsRun, ", ")
+				if r.Trimmed > 0 || r.TrimSkipped > 0 {
+					detail = Tf("summary.procs", detail, r.Trimmed, r.TrimSkipped)
+				}
+				fmt.Printf("       %s%s%s\n", CYAN, Tf("summary.ran", detail), RST)
+			}
+
+		case s.idx == 11:
+			switch {
+			case results.RecycleBinFailed:
+				line(s.idx, dim(T("summary.failed")))
+			case results.RecycleBinBytes > 0:
+				line(s.idx, Tf("summary.bin_freed", FormatBytesHuman(results.RecycleBinBytes)))
+			default:
+				line(s.idx, T("summary.bin_empty"))
+			}
 		}
 	}
 
-	// Deep Cleanup summary line
+	// Deep Cleanup summary line. Its label carries the red "RUN ONCE" tag, so
+	// it is built here rather than through line() - padding is applied from
+	// the plain form, since the color escapes have no visible width.
+	deepTag := fmt.Sprintf("%s - %s%s%s%s", T("step.12.short"), RED, T("step.12.tag"), RST,
+		strings.Repeat(" ", max(0, nameW-len([]rune(deepPlain)))))
+	deepState := dim(T("common.skipped"))
 	if results.DeepCleanupRan {
 		if results.DeepCleanupFailed {
-			fmt.Printf("  [12] Deep Cleanup - %sRUN ONCE%s : %spartial/failed%s\n", RED, RST, CYAN, RST)
+			deepState = dim(T("summary.partial"))
 		} else {
-			fmt.Printf("  [12] Deep Cleanup - %sRUN ONCE%s : %scompleted%s\n", RED, RST, RED, RST)
+			deepState = RED + T("summary.completed") + RST
 		}
-	} else {
-		fmt.Printf("  [12] Deep Cleanup - %sRUN ONCE%s : %sSKIPPED%s\n", RED, RST, CYAN, RST)
 	}
+	fmt.Printf("  %-5s%s : %s\n", "[12]", deepTag, deepState)
 
 	fmt.Println()
 	fmt.Println("+---------------------------------------+")
-	fmt.Println("  ALL DONE - Performance Boost Complete!")
+	fmt.Printf("  %s\n", T("summary.all_done"))
 	fmt.Println("+---------------------------------------+")
 	fmt.Println()
 	fmt.Printf("  %s\n", VersionLine())
