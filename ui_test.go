@@ -190,6 +190,62 @@ func TestNoRawKeysOnScreen(t *testing.T) {
 	}
 }
 
+// TestQuickEditDisabledMode covers the console flag arithmetic behind the
+// click-to-freeze fix. Clicking the window used to put the console into
+// selection mode, which blocks every write - so the app appeared to hang,
+// and could not even print a warning, because printing was what was blocked.
+//
+// The syscall itself cannot be tested here: `go test` redirects the standard
+// handles, so there is no console to query. The bit maths is the part that
+// can silently go wrong, and it is what this checks.
+func TestQuickEditDisabledMode(t *testing.T) {
+	const (
+		processedInput = 0x0001 // ENABLE_PROCESSED_INPUT
+		mouseInput     = 0x0010 // ENABLE_MOUSE_INPUT
+	)
+
+	cases := []struct {
+		name string
+		in   uint32
+	}{
+		{"typical default console", processedInput | mouseInput | ENABLE_QUICK_EDIT_MODE},
+		{"quick edit already off", processedInput | mouseInput},
+		{"extended flags already set", ENABLE_EXTENDED_FLAGS | ENABLE_QUICK_EDIT_MODE},
+		{"no flags at all", 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := quickEditDisabledMode(c.in)
+
+			if got&ENABLE_QUICK_EDIT_MODE != 0 {
+				t.Error("QuickEdit is still enabled - clicking the window would still freeze the app")
+			}
+			// Without this flag Windows ignores the QuickEdit change entirely.
+			if got&ENABLE_EXTENDED_FLAGS == 0 {
+				t.Error("ENABLE_EXTENDED_FLAGS not set - the QuickEdit change would be ignored")
+			}
+			// Unrelated settings belong to the user, not to us.
+			preserved := c.in &^ (ENABLE_QUICK_EDIT_MODE | ENABLE_EXTENDED_FLAGS)
+			if got&preserved != preserved {
+				t.Errorf("other console flags were lost: input 0x%X, output 0x%X", c.in, got)
+			}
+		})
+	}
+}
+
+// TestRestoreConsoleModeIsSafeWithoutAConsole documents that exiting must not
+// panic when the mode was never captured - which is the case for every test
+// run, and for any environment where the handle is redirected.
+func TestRestoreConsoleModeIsSafeWithoutAConsole(t *testing.T) {
+	saved, savedFlag := origInputMode, origInputModeSaved
+	defer func() { origInputMode, origInputModeSaved = saved, savedFlag }()
+
+	origInputMode, origInputModeSaved = 0, false
+	RestoreConsoleMode() // must be a no-op, not a crash
+	RestoreConsoleMode()
+}
+
 // TestCenterInBox keeps headings inside the 41-column rule and centered.
 func TestCenterInBox(t *testing.T) {
 	for _, s := range []string{"CLEANING SUMMARY", "CONFIGURAR OPCIONES DE LIMPIEZA", "X"} {

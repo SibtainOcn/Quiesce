@@ -37,12 +37,17 @@ jobs:
 
       # Catches a dependency added without go.sum being updated, and stops a
       # future dependency from quietly raising the Go floor above 1.23.
+      #
+      # `git diff` is used rather than comparing file copies: Git for Windows
+      # checks these files out with CRLF, while `go mod tidy` rewrites them
+      # with LF, so a plain diff reports every single line as changed even
+      # when nothing actually differs. git normalises line endings before
+      # comparing, so it only reports real changes.
       - name: Verify go.mod and go.sum are tidy
         shell: bash
         run: |
-          cp go.mod go.mod.bak && cp go.sum go.sum.bak
           go mod tidy
-          if ! diff -u go.mod.bak go.mod || ! diff -u go.sum.bak go.sum; then
+          if ! git diff --exit-code -- go.mod go.sum; then
             echo "::error::go.mod/go.sum are not tidy - run 'go mod tidy' and commit the result"
             exit 1
           fi

@@ -21,6 +21,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The value is preserved when settings are saved.
 - **UTF-8 console output**, so accented characters render correctly instead
   of as mojibake.
+- The console window title now shows the version, e.g. `Quiesce v2.4.0`.
 - **Test suite** covering translation completeness, format-verb consistency,
   menu alignment, config round-tripping, and language fallback.
 - **CI on every push and pull request**: build and test on Go 1.23 and
@@ -37,6 +38,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Clicking the console window no longer freezes Quiesce.** Windows enables
+  QuickEdit by default, so a click put the console into selection mode, which
+  blocks every write until Enter or Esc is pressed - the app appeared to hang
+  and could not print an explanation, because printing was what was blocked.
+  QuickEdit is now switched off at startup and restored on exit, so a
+  terminal you already had open is left as you found it. Mouse drag-select is
+  unavailable while Quiesce runs; right-click → Mark still works.
 - Saving settings no longer erases a `LANGUAGE=` line from the config file.
 - The `[12] Deep Cleanup` summary row now lines up with every other row; it
   was one column off in English and further off in longer languages.
