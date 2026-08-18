@@ -90,7 +90,7 @@ func init() {
 }
 
 // VersionLine is the single-line identity shown in the menu banner, e.g.
-// "SibtainOcn ~ Quiesce v2.3.0".
+// "SibtainOcn ~ Quiesce v2.4.0".
 func VersionLine() string {
 	return fmt.Sprintf("%s ~ %s v%s", Author, AppName, Version)
 }
