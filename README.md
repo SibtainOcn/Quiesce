@@ -134,16 +134,7 @@ Put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`) to run `qc` from any 
 
 ## Support & License
 
-- **License**: [GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`)
-
-  Quiesce is free software. You may use, study, share, and modify it. If you
-  distribute a modified version, it must also be free software under the GPL,
-  with source available — so every user of a fork keeps the same freedoms you
-  have here. This matters for a tool that runs as Administrator: nobody should
-  have to trust a version of it they cannot read.
-
-  Quiesce comes with ABSOLUTELY NO WARRANTY. See [LICENSE](LICENSE) for the
-  full terms.
+- **License**: [GPL-3.0-or-later](LICENSE)
 - **Support**: If Quiesce saved your pc from clutter free junks, optimize and boost performance, feel free to support the project:
 
 <a href="https://buymeacoffee.com/REDACTED"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
