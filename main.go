@@ -31,6 +31,7 @@ func main() {
 			fmt.Printf("\n\x1b[31m[FATAL]\x1b[0m %s\n", Tf("common.fatal", r))
 			fmt.Print(T("common.press_enter"))
 			bufio.NewReader(os.Stdin).ReadString('\n')
+			RestoreConsoleMode()
 			os.Exit(1)
 		}
 	}()
@@ -42,6 +43,12 @@ func main() {
 	// across the elevation anyway.
 	EnableVirtualTerminalProcessing()
 	EnableUTF8Console()
+	DisableQuickEditMode()
+
+	// Covers the paths that return normally rather than calling os.Exit -
+	// notably --version and --help, which exit before the menu ever opens.
+	// Calls made on the os.Exit paths are separate and harmless to repeat.
+	defer RestoreConsoleMode()
 
 	// The config path is resolved, and the UI language settled, before ANY
 	// output. InitLanguage needs the config file for its LANGUAGE= override,
@@ -57,13 +64,17 @@ func main() {
 	// Ensure Administrator privilege
 	EnsureAdmin()
 
-	// Re-apply console setup: EnsureAdmin relaunches into a fresh console,
-	// so ANSI colors and the UTF-8 code page have to be enabled again.
+	// Re-apply console setup: EnsureAdmin relaunches into a fresh console, so
+	// ANSI colors, the UTF-8 code page and the QuickEdit fix all have to be
+	// applied again to the new console.
 	EnableVirtualTerminalProcessing()
 	EnableUTF8Console()
+	DisableQuickEditMode()
 
-	// Set a clean console window title instead of showing the exe's file path
-	SetConsoleTitle("Quiesce")
+	// Set a clean console window title instead of showing the exe's file
+	// path. The version is included so a screenshot always says which build
+	// it came from.
+	SetConsoleTitle(AppName + " v" + Version)
 
 	// Load configuration
 	cfg, err := LoadConfig(configFilePath)
@@ -124,6 +135,7 @@ func main() {
 		// before the summary has been read.
 		fmt.Print(T("common.press_enter"))
 		WaitForEnter()
+		RestoreConsoleMode()
 		os.Exit(0)
 	}
 }

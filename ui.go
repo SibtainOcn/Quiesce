@@ -40,6 +40,25 @@ var (
 // CP_UTF8 is the Windows code page identifier for UTF-8.
 const CP_UTF8 = 65001
 
+// Console input mode flags. These are not exposed by x/sys/windows, so they
+// are declared from the Win32 headers.
+const (
+	// ENABLE_QUICK_EDIT_MODE lets the user select text by dragging the
+	// mouse. It is ON by default and it is a trap for a menu-driven app.
+	ENABLE_QUICK_EDIT_MODE = 0x0040
+
+	// ENABLE_EXTENDED_FLAGS must be set for a change to the quick-edit bit
+	// to be honoured at all - without it SetConsoleMode silently ignores it.
+	ENABLE_EXTENDED_FLAGS = 0x0080
+)
+
+// origInputMode holds the console input settings as they were before Quiesce
+// changed them, so they can be restored on exit.
+var (
+	origInputMode      uint32
+	origInputModeSaved bool
+)
+
 const (
 	RED    = "\x1b[31m"
 	CYAN   = "\x1b[36m"
@@ -181,6 +200,75 @@ func EnableUTF8Console() {
 		return
 	}
 	procSetConsoleOutputCP.Call(uintptr(CP_UTF8))
+}
+
+// DisableQuickEditMode stops a mouse click inside the console window from
+// freezing the program.
+//
+// Windows consoles ship with QuickEdit ON: clicking anywhere in the window
+// puts the console into selection mode, which BLOCKS every subsequent write
+// until the user presses Enter or Esc. The window title gains a "Select "
+// prefix while this is happening, which is the only clue most people get.
+//
+// For Quiesce this is a real hazard rather than a cosmetic one. Someone
+// clicking the window to focus it - the obvious thing to do before pressing
+// a key - can freeze the app mid-clean, with services stopped and no output
+// explaining why. Turning QuickEdit off costs drag-to-select (right-click ->
+// Mark still works, as does Ctrl+Shift+C in Windows Terminal) and removes an
+// entire class of "it hung" report.
+//
+// Every other mode bit is preserved, and failure is ignored: worst case the
+// old click-to-freeze behaviour remains.
+// The change is undone by RestoreConsoleMode on exit, because Quiesce may be
+// running in a terminal the user already had open - leaving their console
+// permanently unable to select text would be a rude side effect of running a
+// cleaner once.
+func DisableQuickEditMode() {
+	handle, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
+	if err != nil {
+		return
+	}
+	var mode uint32
+	if err := windows.GetConsoleMode(handle, &mode); err != nil {
+		return
+	}
+
+	// Remember the console's original settings once, on the first call, so a
+	// later call (after elevation re-runs the console setup) cannot overwrite
+	// the saved value with our own already-modified mode.
+	if !origInputModeSaved {
+		origInputMode = mode
+		origInputModeSaved = true
+	}
+
+	_ = windows.SetConsoleMode(handle, quickEditDisabledMode(mode))
+}
+
+// quickEditDisabledMode returns mode with QuickEdit turned off, extended
+// flags turned on, and every other bit left alone.
+//
+// Split out from DisableQuickEditMode so the bit arithmetic can be tested
+// without a real console attached - under `go test` the standard handles are
+// redirected, so the syscall path cannot be exercised at all.
+func quickEditDisabledMode(mode uint32) uint32 {
+	return (mode | ENABLE_EXTENDED_FLAGS) &^ ENABLE_QUICK_EDIT_MODE
+}
+
+// RestoreConsoleMode puts the console's input settings back the way they were
+// before DisableQuickEditMode touched them.
+//
+// It is safe to call more than once, and does nothing if the mode was never
+// captured. Errors are ignored: the process is on its way out, and there is
+// nothing useful to say to a user whose console is already closing.
+func RestoreConsoleMode() {
+	if !origInputModeSaved {
+		return
+	}
+	handle, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
+	if err != nil {
+		return
+	}
+	_ = windows.SetConsoleMode(handle, origInputMode)
 }
 
 func EnableVirtualTerminalProcessing() {
