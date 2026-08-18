@@ -1,0 +1,107 @@
+name: CI
+
+# Runs on every push and pull request. The point is that nobody - including a
+# first-time contributor sending a translation - can merge something that
+# fails to build, breaks a test, or quietly changes the console layout.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Quiesce calls the Windows API directly, so it can only build and test on
+    # Windows. Go 1.23 is the floor promised in the README; the matrix keeps
+    # that promise honest instead of assuming it.
+    name: Build and test (Go ${{ matrix.go }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.23', 'stable']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      # Catches a dependency added without go.sum being updated, and stops a
+      # future dependency from quietly raising the Go floor above 1.23.
+      #
+      # `git diff` is used rather than comparing file copies: Git for Windows
+      # checks these files out with CRLF, while `go mod tidy` rewrites them
+      # with LF, so a plain diff reports every single line as changed even
+      # when nothing actually differs. git normalises line endings before
+      # comparing, so it only reports real changes.
+      - name: Verify go.mod and go.sum are tidy
+        shell: bash
+        run: |
+          go mod tidy
+          if ! git diff --exit-code -- go.mod go.sum; then
+            echo "::error::go.mod/go.sum are not tidy - run 'go mod tidy' and commit the result"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+  # gofmt is purely syntactic, so it does not need Windows. Running it on
+  # Linux also sidesteps Git for Windows checking the sources out with CRLF,
+  # which gofmt would report as a diff on every single file.
+  format:
+    name: gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need gofmt:"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+
+  # Both shipped architectures must compile. Cross-compiling from Linux is
+  # enough to catch an arch-specific mistake without a second Windows runner.
+  crossbuild:
+    name: Cross-build ${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goarch: [amd64, '386']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: windows
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o /dev/null .

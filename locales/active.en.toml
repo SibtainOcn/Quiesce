@@ -1,0 +1,195 @@
+# Quiesce - English (source language)
+#
+# This is the source translation and the fallback for every other language.
+# Any key missing from another file resolves here, so this file must stay
+# complete.
+#
+# To add a language: copy this file to active.<code>.toml (for example
+# active.fr.toml), translate every value, and rebuild. The file is embedded
+# into the binary automatically - no code changes are needed.
+#
+# Rules for translators:
+#   - Never change the key on the left of the "=".
+#   - Keep every %s / %d / %.1f / %% verb, in the same order, unless your
+#     language genuinely needs a different word order.
+#   - Windows technical terms (Prefetch, DNS, RAM, Temp, cleanmgr, NTSTATUS)
+#     stay in English on purpose - Windows itself does not translate them.
+#   - Do not pad values with trailing spaces. Column alignment is computed at
+#     runtime; typed spaces would double up.
+
+# --- Cleaning steps: menu label / progress header / summary label ---
+"step.1.name" = "Windows Temp folder"
+"step.1.action" = "Cleaning Windows Temp folder..."
+"step.1.short" = "Windows Temp"
+
+"step.2.name" = "User Temp folder"
+"step.2.action" = "Cleaning User Temp folder..."
+"step.2.short" = "User Temp"
+
+"step.3.name" = "Prefetch folder"
+"step.3.action" = "Cleaning Prefetch folder..."
+"step.3.short" = "Prefetch"
+
+"step.4.name" = "Windows Error Reports"
+"step.4.action" = "Cleaning Windows Error Reports..."
+"step.4.short" = "Error Reports"
+
+"step.5.name" = "Delivery Optimization"
+"step.5.action" = "Cleaning Delivery Optimization Cache..."
+"step.5.short" = "Delivery Optimization"
+
+"step.6.name" = "Windows Update Cache"
+"step.6.action" = "Cleaning Windows Update Cache..."
+"step.6.short" = "Windows Update Cache"
+
+"step.7.name" = "Windows Log Files"
+"step.7.action" = "Cleaning Windows Log Files..."
+"step.7.short" = "Windows Log Files"
+
+"step.8.name" = "Windows Installer Temp"
+"step.8.action" = "Cleaning Windows Installer Temp..."
+"step.8.short" = "Installer Temp"
+
+"step.9.name" = "DNS Cache Flush"
+"step.9.action" = "Flushing DNS Cache..."
+"step.9.short" = "DNS Cache"
+
+"step.10.name" = "RAM Optimization"
+"step.10.action" = "Optimizing RAM..."
+"step.10.short" = "RAM Optimization"
+
+"step.11.name" = "Empty Recycle Bin"
+"step.11.action" = "Emptying Recycle Bin..."
+"step.11.short" = "Recycle Bin"
+
+"step.12.name" = "Deep Cleanup"
+"step.12.action" = "Deep Cleanup - AGGRESSIVE..."
+"step.12.short" = "Deep Cleanup"
+"step.12.tag" = "RUN ONCE"
+
+# --- RAM Optimization sub-options: label and parenthetical note ---
+"sub.101.name" = "Flush modified list"
+"sub.101.note" = "dirty pages to disk"
+"sub.102.name" = "Purge standby list"
+"sub.102.note" = "frees cached memory"
+"sub.103.name" = "System file cache"
+"sub.103.note" = "kernel disk cache"
+"sub.104.name" = "Trim working sets"
+"sub.104.note" = "app memory, harsh"
+
+# --- Main menu ---
+"menu.will_clean" = "This will clean:"
+"menu.hint" = "Press %sENTER%s to Run  |  Press %sF%s to Configure"
+"menu.cpu" = "CPU"
+"menu.memory" = "MEMORY"
+
+# --- Settings screen ---
+"settings.title" = "CONFIGURE CLEANING OPTIONS"
+"settings.keys" = "%sW%s = Up | %sS%s = Down | %sA%s = OFF | %sD%s = ON | %sL%s = Language | %sE%s = Save"
+"settings.save_hint" = "Press %sE%s to Save & Return"
+"settings.saved" = "Configuration saved."
+
+# --- Language picker (reached with L from the settings screen) ---
+"language.title" = "SELECT LANGUAGE"
+"language.keys" = "%s1-9%s = Choose language  |  %sE%s = Save"
+"language.save_hint" = "Press %sE%s to Save & Return"
+
+# --- Shared words ---
+"common.on" = "ON"
+"common.off" = "OFF"
+"common.done" = "Done!"
+"common.skipped" = "SKIPPED"
+"common.press_enter" = "Press ENTER to exit..."
+"common.config_made" = "Config created: %s"
+"common.config_warn" = "Warning loading config: %v"
+"common.fatal" = "Unexpected error: %v"
+
+# --- Cleaner run output ---
+"cleaner.crashed" = "Cleaning pipeline crashed: %v"
+"cleaner.partial" = "Partial results will be shown."
+"cleaner.dns_ok" = "DNS cache flushed"
+"cleaner.dns_fail" = "[SKIP] Could not flush DNS"
+"cleaner.bin_freed" = "Recycle Bin emptied - %s freed"
+"cleaner.bin_empty" = "Recycle Bin emptied - already empty"
+"cleaner.bin_fail" = "[SKIP] Could not empty Recycle Bin"
+"cleaner.reg_fail" = "Could not setup registry for cleanmgr: %v"
+"cleaner.cleanmgr_run" = "Running: cleanmgr.exe /sagerun:99"
+"cleaner.cleanmgr_fail" = "cleanmgr.exe launch failed: %v"
+"cleaner.cleanmgr_wait" = "Waiting for cleanmgr background worker to finish..."
+"cleaner.cleanmgr_ok" = "cleanmgr.exe completed"
+"cleaner.cleanmgr_time" = "cleanmgr.exe timed out (may still be running)"
+
+# --- RAM optimizer ---
+"ram.nothing" = "All RAM Optimization sub-options are OFF - nothing to do"
+"ram.priv_step" = "[Step 1/%d] Enabling SeProfileSingleProcessPrivilege..."
+"ram.priv_ok" = "Privilege enabled successfully"
+"ram.priv_fail" = "FAILED to enable privilege"
+"ram.step" = "[Step %d/%d] %s"
+"ram.trimmed" = "%d processes trimmed, %d skipped (protected/no access)"
+"ram.trim_none" = "No processes trimmed (%d skipped) - run as Administrator"
+"ram.flushed" = "Modified page list flushed - NTSTATUS: %s"
+"ram.flush_fail" = "FlushModifiedList returned NTSTATUS: %s"
+"ram.cache_ok" = "System file cache flushed"
+"ram.cache_fail" = "Could not flush system file cache - run as Administrator"
+"ram.standby_ok" = "Standby list purged - NTSTATUS: %s"
+"ram.standby_fail" = "PurgeStandbyList returned NTSTATUS: %s"
+"ram.results_title" = "SYSTEM RESULTS"
+
+# Per-operation banner and the explanatory note printed under it.
+"ram.trim.title" = "Trimming process working sets..."
+"ram.trim.note" = "(Paging out live app memory - skips the foreground app)"
+"ram.flush.title" = "Flushing modified page list..."
+"ram.flush.note" = "(Writing dirty pages to disk so they can be freed)"
+"ram.cache.title" = "Flushing system file cache..."
+"ram.cache.note" = "(Dropping the kernel's cached file data - safe, cache only)"
+"ram.standby.title" = "Purging standby list..."
+"ram.standby.note" = "(Freeing cached/standby memory - this is the main operation)"
+
+# The four labels below align with each other: 13 characters before the colon.
+"ram.freed" = "RAM Freed    : %d MB"
+"ram.drop" = "Usage Drop   : %.1f%% (%.1f%% -> %.1f%%)"
+"ram.status_ok" = "Status       : SUCCESS - RAM was actually freed"
+"ram.freed_zero" = "RAM Freed    : 0 MB (standby list was already empty)"
+"ram.status_zero" = "Status       : Nothing to free - this is normal if run recently"
+"ram.change" = "RAM Change   : %d MB (background app allocated during cleanup)"
+"ram.status_neg" = "Status       : Try closing background apps and run again"
+
+# Short operation names listed on the summary's "ran:" line.
+"ram.op.trim" = "trim"
+"ram.op.flush" = "flush"
+"ram.op.cache" = "file cache"
+"ram.op.standby" = "standby"
+
+# --- Summary ---
+"summary.title" = "CLEANING SUMMARY"
+"summary.total" = "Total items cleaned : %d"
+"summary.skipped" = "Items skipped       : %d (in use/protected)"
+"summary.items" = "%d items"
+"summary.flushed" = "flushed"
+"summary.subs_off" = "all sub-options OFF"
+"summary.no_priv" = "failed (no privilege)"
+"summary.ram_freed" = "%d MB freed (%.1f%% -> %.1f%%, -%.1f%%)"
+"summary.ram_zero" = "0 MB (already optimal)"
+"summary.ram_neg" = "%d MB (background app allocated)"
+"summary.ran" = "ran: %s"
+"summary.procs" = "%s [%d procs trimmed, %d skipped]"
+"summary.failed" = "failed"
+"summary.bin_freed" = "%s freed"
+"summary.bin_empty" = "already empty"
+"summary.partial" = "partial/failed"
+"summary.completed" = "completed"
+"summary.all_done" = "ALL DONE - Performance Boost Complete!"
+
+# --- Elevation ---
+"priv.requesting" = "Requesting administrator privileges..."
+"priv.exe_error" = "Error obtaining executable path: %v"
+"priv.failed" = "Failed to elevate process (error code %d)."
+
+# --- --version / --help ---
+"version.license" = "GPL-3.0-or-later - free software, with no warranty"
+"version.compare" = "Compare with the checksum on %s/releases"
+"help.tagline" = "%s v%s - Windows system cleaner and RAM optimizer"
+"help.usage" = "Usage: %s [flag]"
+"help.no_flag" = "(no flag)          Launch the interactive menu"
+"help.version" = "-v, --version      Version, author, license and checksum"
+"help.help" = "-h, --help         Show this help"
