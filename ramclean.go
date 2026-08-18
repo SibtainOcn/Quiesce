@@ -374,67 +374,67 @@ func RunRamCleaner(cfg *Config) RamResult {
 	var steps []ramStep
 
 	if cfg.RamTrimWorkingSets == 1 {
-		result.OpsRun = append(result.OpsRun, "trim")
+		result.OpsRun = append(result.OpsRun, T("ram.op.trim"))
 		steps = append(steps, ramStep{
-			"Trimming process working sets...",
-			"(Paging out live app memory - skips the foreground app)",
+			T("ram.trim.title"),
+			T("ram.trim.note"),
 			func() {
 				trimmed, skipped := TrimAllWorkingSets()
 				result.Trimmed = trimmed
 				result.TrimSkipped = skipped
 				if trimmed > 0 {
-					fmt.Printf("    \x1b[31m%d processes trimmed, %d skipped (protected/no access)\x1b[0m\n", trimmed, skipped)
+					fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.trimmed", trimmed, skipped))
 				} else {
-					fmt.Printf("    \x1b[33mNo processes trimmed (%d skipped) - run as Administrator\x1b[0m\n", skipped)
+					fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.trim_none", skipped))
 				}
 			},
 		})
 	}
 
 	if cfg.RamFlushModified == 1 {
-		result.OpsRun = append(result.OpsRun, "flush")
+		result.OpsRun = append(result.OpsRun, T("ram.op.flush"))
 		steps = append(steps, ramStep{
-			"Flushing modified page list...",
-			"(Writing dirty pages to disk so they can be freed)",
+			T("ram.flush.title"),
+			T("ram.flush.note"),
 			func() {
 				res := FlushModifiedList()
 				status := FormatNTSTATUS(res)
 				if res == 0 {
-					fmt.Printf("    \x1b[31mModified page list flushed - NTSTATUS: %s\x1b[0m\n", status)
+					fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.flushed", status))
 				} else {
-					fmt.Printf("    \x1b[33mFlushModifiedList returned NTSTATUS: %s\x1b[0m\n", status)
+					fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.flush_fail", status))
 				}
 			},
 		})
 	}
 
 	if cfg.RamFileCache == 1 {
-		result.OpsRun = append(result.OpsRun, "file cache")
+		result.OpsRun = append(result.OpsRun, T("ram.op.cache"))
 		steps = append(steps, ramStep{
-			"Flushing system file cache...",
-			"(Dropping the kernel's cached file data - safe, cache only)",
+			T("ram.cache.title"),
+			T("ram.cache.note"),
 			func() {
 				if PurgeSystemFileCache() {
-					fmt.Println("    \x1b[31mSystem file cache flushed\x1b[0m")
+					fmt.Printf("    \x1b[31m%s\x1b[0m\n", T("ram.cache_ok"))
 				} else {
-					fmt.Println("    \x1b[33mCould not flush system file cache - run as Administrator\x1b[0m")
+					fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.cache_fail"))
 				}
 			},
 		})
 	}
 
 	if cfg.RamPurgeStandby == 1 {
-		result.OpsRun = append(result.OpsRun, "standby")
+		result.OpsRun = append(result.OpsRun, T("ram.op.standby"))
 		steps = append(steps, ramStep{
-			"Purging standby list...",
-			"(Freeing cached/standby memory - this is the main operation)",
+			T("ram.standby.title"),
+			T("ram.standby.note"),
 			func() {
 				res := PurgeStandbyList()
 				status := FormatNTSTATUS(res)
 				if res == 0 {
-					fmt.Printf("    \x1b[31mStandby list purged - NTSTATUS: %s\x1b[0m\n", status)
+					fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.standby_ok", status))
 				} else {
-					fmt.Printf("    \x1b[33mPurgeStandbyList returned NTSTATUS: %s\x1b[0m\n", status)
+					fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.standby_fail", status))
 				}
 			},
 		})
@@ -442,7 +442,7 @@ func RunRamCleaner(cfg *Config) RamResult {
 
 	if len(steps) == 0 {
 		fmt.Println()
-		fmt.Println("    \x1b[33mAll RAM Optimization sub-options are OFF - nothing to do\x1b[0m")
+		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.nothing"))
 		result.NothingToRun = true
 		return result
 	}
@@ -451,18 +451,18 @@ func RunRamCleaner(cfg *Config) RamResult {
 
 	// --- Step 1: Enable privilege ---
 	fmt.Println()
-	fmt.Printf("  \x1b[36m[Step 1/%d] Enabling SeProfileSingleProcessPrivilege...\x1b[0m\n", total)
+	fmt.Printf("  \x1b[36m%s\x1b[0m\n", Tf("ram.priv_step", total))
 	if EnablePrivilege() {
-		fmt.Println("    \x1b[31mPrivilege enabled successfully\x1b[0m")
+		fmt.Printf("    \x1b[31m%s\x1b[0m\n", T("ram.priv_ok"))
 	} else {
-		fmt.Println("    \x1b[33mFAILED to enable privilege\x1b[0m")
+		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.priv_fail"))
 		result.PrivFailed = true
 		return result
 	}
 
 	for i, s := range steps {
 		fmt.Println()
-		fmt.Printf("  \x1b[36m[Step %d/%d] %s\x1b[0m\n", i+2, total, s.title)
+		fmt.Printf("  \x1b[36m%s\x1b[0m\n", Tf("ram.step", i+2, total, s.title))
 		fmt.Printf("    %s\n", s.note)
 		s.run()
 	}
@@ -486,19 +486,19 @@ func RunRamCleaner(cfg *Config) RamResult {
 
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")
-	fmt.Println("             \x1b[36mSYSTEM RESULTS\x1b[0m")
+	fmt.Printf("  \x1b[36m%s\x1b[0m\n", centerInBox(T("ram.results_title")))
 	fmt.Println("  +---------------------------------------+")
 
 	if freedMB > 0 {
-		fmt.Printf("    \x1b[31mRAM Freed    : %d MB\x1b[0m\n", freedMB)
-		fmt.Printf("    \x1b[31mUsage Drop   : %.1f%% (%.1f%% -> %.1f%%)\x1b[0m\n", dropPct, before.UsedPercent, after.UsedPercent)
-		fmt.Println("    \x1b[31mStatus       : SUCCESS - RAM was actually freed\x1b[0m")
+		fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.freed", freedMB))
+		fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.drop", dropPct, before.UsedPercent, after.UsedPercent))
+		fmt.Printf("    \x1b[31m%s\x1b[0m\n", T("ram.status_ok"))
 	} else if freedMB == 0 {
-		fmt.Println("    \x1b[33mRAM Freed    : 0 MB (standby list was already empty)\x1b[0m")
-		fmt.Println("    \x1b[33mStatus       : Nothing to free - this is normal if run recently\x1b[0m")
+		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.freed_zero"))
+		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.status_zero"))
 	} else {
-		fmt.Printf("    \x1b[33mRAM Change   : %d MB (background app allocated during cleanup)\x1b[0m\n", freedMB)
-		fmt.Println("    \x1b[33mStatus       : Try closing background apps and run again\x1b[0m")
+		fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.change", freedMB))
+		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.status_neg"))
 	}
 
 	// No CPU/Memory box here on purpose: the same numbers are already in the

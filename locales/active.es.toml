@@ -1,0 +1,190 @@
+# Quiesce - Spanish (neutral / Latin American)
+#
+# Windows API and tool names are kept in English on purpose - Windows itself
+# does not translate Prefetch, DNS, Temp, cleanmgr or NTSTATUS, so translating
+# them would make this output harder to match against what Windows shows.
+#
+# Accents are written properly. EnableUTF8Console in ui.go switches the console
+# to UTF-8 so they render correctly - never strip accents to work around a
+# console encoding problem.
+#
+# This file is also the template for new languages: copy it to
+# active.<code>.toml and translate every value, leaving keys and %-verbs alone.
+
+# --- Pasos de limpieza: etiqueta / encabezado de progreso / resumen ---
+"step.1.name" = "Carpeta Temp de Windows"
+"step.1.action" = "Limpiando la carpeta Temp de Windows..."
+"step.1.short" = "Temp de Windows"
+
+"step.2.name" = "Carpeta Temp del usuario"
+"step.2.action" = "Limpiando la carpeta Temp del usuario..."
+"step.2.short" = "Temp del usuario"
+
+"step.3.name" = "Carpeta Prefetch"
+"step.3.action" = "Limpiando la carpeta Prefetch..."
+"step.3.short" = "Prefetch"
+
+"step.4.name" = "Informes de errores de Windows"
+"step.4.action" = "Limpiando los informes de errores de Windows..."
+"step.4.short" = "Informes de errores"
+
+"step.5.name" = "Optimización de entrega"
+"step.5.action" = "Limpiando la caché de Optimización de entrega..."
+"step.5.short" = "Optimización de entrega"
+
+"step.6.name" = "Caché de Windows Update"
+"step.6.action" = "Limpiando la caché de Windows Update..."
+"step.6.short" = "Caché de Windows Update"
+
+"step.7.name" = "Archivos de registro de Windows"
+"step.7.action" = "Limpiando los archivos de registro de Windows..."
+"step.7.short" = "Registros de Windows"
+
+"step.8.name" = "Temp de Windows Installer"
+"step.8.action" = "Limpiando Temp de Windows Installer..."
+"step.8.short" = "Temp del instalador"
+
+"step.9.name" = "Vaciar caché DNS"
+"step.9.action" = "Vaciando la caché DNS..."
+"step.9.short" = "Caché DNS"
+
+"step.10.name" = "Optimización de RAM"
+"step.10.action" = "Optimizando la RAM..."
+"step.10.short" = "Optimización de RAM"
+
+"step.11.name" = "Vaciar Papelera de reciclaje"
+"step.11.action" = "Vaciando la Papelera de reciclaje..."
+"step.11.short" = "Papelera de reciclaje"
+
+"step.12.name" = "Limpieza profunda"
+"step.12.action" = "Limpieza profunda - AGRESIVA..."
+"step.12.short" = "Limpieza profunda"
+"step.12.tag" = "UNA VEZ"
+
+# --- Sub-opciones de Optimización de RAM ---
+"sub.101.name" = "Vaciar lista modificada"
+"sub.101.note" = "páginas sucias al disco"
+"sub.102.name" = "Purgar lista de reserva"
+"sub.102.note" = "libera memoria en caché"
+"sub.103.name" = "Caché de archivos"
+"sub.103.note" = "caché de disco del kernel"
+"sub.104.name" = "Recortar conjuntos"
+"sub.104.note" = "memoria de apps, agresivo"
+
+# --- Menú principal ---
+"menu.will_clean" = "Esto va a limpiar:"
+"menu.hint" = "Pulsa %sENTER%s para Ejecutar  |  Pulsa %sF%s para Configurar"
+"menu.cpu" = "CPU"
+"menu.memory" = "MEMORIA"
+
+# --- Pantalla de configuración ---
+"settings.title" = "CONFIGURAR OPCIONES DE LIMPIEZA"
+"settings.keys" = "%sW%s = Arriba | %sS%s = Abajo | %sA%s = OFF | %sD%s = ON | %sL%s = Idioma | %sE%s = Guardar"
+"settings.save_hint" = "Pulsa %sE%s para Guardar y Volver"
+"settings.saved" = "Configuración guardada."
+
+# --- Selector de idioma (se abre con L desde la pantalla de configuración) ---
+"language.title" = "SELECCIONAR IDIOMA"
+"language.keys" = "%s1-9%s = Elegir idioma  |  %sE%s = Guardar"
+"language.save_hint" = "Pulsa %sE%s para Guardar y Volver"
+
+# --- Palabras comunes ---
+"common.on" = "ON"
+"common.off" = "OFF"
+"common.done" = "¡Listo!"
+"common.skipped" = "OMITIDO"
+"common.press_enter" = "Pulsa ENTER para salir..."
+"common.config_made" = "Configuración creada: %s"
+"common.config_warn" = "Advertencia al cargar la configuración: %v"
+"common.fatal" = "Error inesperado: %v"
+
+# --- Salida del limpiador ---
+"cleaner.crashed" = "El proceso de limpieza falló: %v"
+"cleaner.partial" = "Se mostrarán los resultados parciales."
+"cleaner.dns_ok" = "Caché DNS vaciada"
+"cleaner.dns_fail" = "[SKIP] No se pudo vaciar la caché DNS"
+"cleaner.bin_freed" = "Papelera de reciclaje vaciada - %s liberados"
+"cleaner.bin_empty" = "Papelera de reciclaje vaciada - ya estaba vacía"
+"cleaner.bin_fail" = "[SKIP] No se pudo vaciar la Papelera de reciclaje"
+"cleaner.reg_fail" = "No se pudo preparar el registro para cleanmgr: %v"
+"cleaner.cleanmgr_run" = "Ejecutando: cleanmgr.exe /sagerun:99"
+"cleaner.cleanmgr_fail" = "No se pudo iniciar cleanmgr.exe: %v"
+"cleaner.cleanmgr_wait" = "Esperando a que termine el proceso en segundo plano de cleanmgr..."
+"cleaner.cleanmgr_ok" = "cleanmgr.exe completado"
+"cleaner.cleanmgr_time" = "cleanmgr.exe agotó el tiempo de espera (puede seguir en ejecución)"
+
+# --- Optimizador de RAM ---
+"ram.nothing" = "Todas las sub-opciones de Optimización de RAM están en OFF - nada que hacer"
+"ram.priv_step" = "[Paso 1/%d] Habilitando SeProfileSingleProcessPrivilege..."
+"ram.priv_ok" = "Privilegio habilitado correctamente"
+"ram.priv_fail" = "FALLÓ al habilitar el privilegio"
+"ram.step" = "[Paso %d/%d] %s"
+"ram.trimmed" = "%d procesos recortados, %d omitidos (protegidos/sin acceso)"
+"ram.trim_none" = "Ningún proceso recortado (%d omitidos) - ejecuta como Administrador"
+"ram.flushed" = "Lista de páginas modificadas vaciada - NTSTATUS: %s"
+"ram.flush_fail" = "FlushModifiedList devolvió NTSTATUS: %s"
+"ram.cache_ok" = "Caché de archivos del sistema vaciada"
+"ram.cache_fail" = "No se pudo vaciar la caché de archivos del sistema - ejecuta como Administrador"
+"ram.standby_ok" = "Lista de reserva purgada - NTSTATUS: %s"
+"ram.standby_fail" = "PurgeStandbyList devolvió NTSTATUS: %s"
+"ram.results_title" = "RESULTADOS DEL SISTEMA"
+
+# Encabezado de cada operación y la nota explicativa que va debajo.
+"ram.trim.title" = "Recortando los conjuntos de trabajo de los procesos..."
+"ram.trim.note" = "(Saca de memoria las apps activas - omite la app en primer plano)"
+"ram.flush.title" = "Vaciando la lista de páginas modificadas..."
+"ram.flush.note" = "(Escribe las páginas sucias en disco para poder liberarlas)"
+"ram.cache.title" = "Vaciando la caché de archivos del sistema..."
+"ram.cache.note" = "(Descarta los datos de archivos en caché del kernel - seguro, solo caché)"
+"ram.standby.title" = "Purgando la lista de reserva..."
+"ram.standby.note" = "(Libera la memoria en caché/reserva - esta es la operación principal)"
+
+# Las cuatro etiquetas siguientes se alinean entre sí: 13 caracteres antes de
+# los dos puntos, igual que en inglés.
+"ram.freed" = "RAM liberada : %d MB"
+"ram.drop" = "Caída de uso : %.1f%% (%.1f%% -> %.1f%%)"
+"ram.status_ok" = "Estado       : ÉXITO - se liberó RAM realmente"
+"ram.freed_zero" = "RAM liberada : 0 MB (la lista de reserva ya estaba vacía)"
+"ram.status_zero" = "Estado       : Nada que liberar - es normal si se ejecutó hace poco"
+"ram.change" = "Cambio de RAM: %d MB (una app en segundo plano reservó memoria)"
+"ram.status_neg" = "Estado       : Cierra apps en segundo plano e inténtalo de nuevo"
+
+# Nombres cortos que aparecen en la línea "ejecutado:" del resumen.
+"ram.op.trim" = "recorte"
+"ram.op.flush" = "vaciado"
+"ram.op.cache" = "caché de archivos"
+"ram.op.standby" = "reserva"
+
+# --- Resumen ---
+"summary.title" = "RESUMEN DE LIMPIEZA"
+"summary.total" = "Elementos limpiados : %d"
+"summary.skipped" = "Elementos omitidos  : %d (en uso/protegidos)"
+"summary.items" = "%d elementos"
+"summary.flushed" = "vaciada"
+"summary.subs_off" = "todas las sub-opciones en OFF"
+"summary.no_priv" = "falló (sin privilegios)"
+"summary.ram_freed" = "%d MB liberados (%.1f%% -> %.1f%%, -%.1f%%)"
+"summary.ram_zero" = "0 MB (ya estaba óptimo)"
+"summary.ram_neg" = "%d MB (reservados por una app en segundo plano)"
+"summary.ran" = "ejecutado: %s"
+"summary.procs" = "%s [%d procesos recortados, %d omitidos]"
+"summary.failed" = "falló"
+"summary.bin_freed" = "%s liberados"
+"summary.bin_empty" = "ya estaba vacía"
+"summary.partial" = "parcial/fallido"
+"summary.completed" = "completado"
+"summary.all_done" = "¡TODO LISTO - Mejora de rendimiento completada!"
+
+# --- Elevación de privilegios ---
+"priv.requesting" = "Solicitando privilegios de administrador..."
+"priv.exe_error" = "Error al obtener la ruta del ejecutable: %v"
+"priv.failed" = "No se pudo elevar el proceso (código de error %d)."
+
+# --- --version / --help ---
+"version.license" = "GPL-3.0-or-later - software libre, sin ninguna garantía"
+"version.compare" = "Compara con la suma de verificación en %s/releases"
+"help.tagline" = "%s v%s - Limpiador del sistema y optimizador de RAM para Windows"
+"help.usage" = "Uso: %s [opción]"
+"help.no_flag" = "(sin opción)       Abre el menú interactivo"
+"help.version" = "-v, --version      Versión, autor, licencia y suma de verificación"
+"help.help" = "-h, --help         Muestra esta ayuda"

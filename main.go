@@ -20,7 +20,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -29,8 +28,8 @@ func main() {
 	// so the user can read the error instead of the window vanishing.
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("\n\x1b[31m[FATAL]\x1b[0m Unexpected error: %v\n", r)
-			fmt.Print("Press ENTER to exit...")
+			fmt.Printf("\n\x1b[31m[FATAL]\x1b[0m %s\n", Tf("common.fatal", r))
+			fmt.Print(T("common.press_enter"))
 			bufio.NewReader(os.Stdin).ReadString('\n')
 			os.Exit(1)
 		}
@@ -42,6 +41,15 @@ func main() {
 	// EnsureAdmin relaunches without arguments, so a flag would be lost
 	// across the elevation anyway.
 	EnableVirtualTerminalProcessing()
+	EnableUTF8Console()
+
+	// The config path is resolved, and the UI language settled, before ANY
+	// output. InitLanguage needs the config file for its LANGUAGE= override,
+	// and --version/--help and the elevation prompt all print before
+	// LoadConfig would otherwise run.
+	configFilePath := ConfigFilePath()
+	InitLanguage(configFilePath)
+
 	if HandleCLIFlags(os.Args[1:]) {
 		return
 	}
@@ -49,31 +57,22 @@ func main() {
 	// Ensure Administrator privilege
 	EnsureAdmin()
 
-	// Enable ANSI terminal color support in Windows console
+	// Re-apply console setup: EnsureAdmin relaunches into a fresh console,
+	// so ANSI colors and the UTF-8 code page have to be enabled again.
 	EnableVirtualTerminalProcessing()
+	EnableUTF8Console()
 
 	// Set a clean console window title instead of showing the exe's file path
 	SetConsoleTitle("Quiesce")
 
-	// Determine configuration file path alongside executable
-	exePath, err := os.Executable()
-	var exeDir string
-	if err == nil {
-		exeDir = filepath.Dir(exePath)
-	} else {
-		exeDir = "."
-	}
-	configFilePath := filepath.Join(exeDir, "cleaner_config.dat")
-
 	// Load configuration
 	cfg, err := LoadConfig(configFilePath)
 	if err != nil {
-		fmt.Printf("Warning loading config: %v\n", err)
+		fmt.Printf("%s\n", Tf("common.config_warn", err))
 	}
 
 	osP1, osP2 := GetOSVersionParts()
 	host, user := GetHostAndUser()
-
 
 	for {
 		ClearScreen()
@@ -123,7 +122,7 @@ func main() {
 		// WaitForEnter flushes anything typed during the run first, so ENTER
 		// presses made while cleaning was in progress can't close the window
 		// before the summary has been read.
-		fmt.Print("Press ENTER to exit...")
+		fmt.Print(T("common.press_enter"))
 		WaitForEnter()
 		os.Exit(0)
 	}
