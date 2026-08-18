@@ -57,10 +57,11 @@ func EnsureAdmin() {
 		return
 	}
 
-	fmt.Println("Requesting administrator privileges...")
+	fmt.Println(T("priv.requesting"))
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("Error obtaining executable path: %v\n", err)
+		fmt.Printf("%s\n", Tf("priv.exe_error", err))
+		RestoreConsoleMode()
 		os.Exit(1)
 	}
 
@@ -82,7 +83,8 @@ func EnsureAdmin() {
 	)
 
 	if ret <= 32 {
-		fmt.Printf("Failed to elevate process (error code %d).\n", ret)
+		fmt.Printf("%s\n", Tf("priv.failed", ret))
 	}
+	RestoreConsoleMode()
 	os.Exit(0)
 }

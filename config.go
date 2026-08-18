@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -46,6 +47,15 @@ type Config struct {
 	RamPurgeStandby    int // free the standby (cached) page list
 	RamFileCache       int // flush the kernel/system file cache working set
 	RamTrimWorkingSets int // page out every process's working set (aggressive)
+
+	// Language is the optional UI language override ("en", "es", ...). Empty
+	// means follow the Windows display language.
+	//
+	// It is read here purely so SaveConfig can write it back: the value that
+	// actually selects the language is read much earlier, by InitLanguage,
+	// before elevation. Without round-tripping it, saving from the settings
+	// screen would silently delete the user's LANGUAGE= line.
+	Language string
 }
 
 func DefaultConfig() *Config {
@@ -69,6 +79,22 @@ func DefaultConfig() *Config {
 	}
 }
 
+// ConfigFilePath returns the path to cleaner_config.dat alongside the running
+// executable, falling back to the working directory if the executable path
+// cannot be determined.
+//
+// This is resolved at startup rather than inside LoadConfig because the
+// language override is read from the same file before elevation, while
+// LoadConfig only runs after it.
+func ConfigFilePath() string {
+	exePath, err := os.Executable()
+	dir := "."
+	if err == nil {
+		dir = filepath.Dir(exePath)
+	}
+	return filepath.Join(dir, "cleaner_config.dat")
+}
+
 func LoadConfig(filePath string) (*Config, error) {
 	cfg := DefaultConfig()
 
@@ -77,7 +103,7 @@ func LoadConfig(filePath string) (*Config, error) {
 		if os.IsNotExist(err) {
 			errSave := SaveConfig(filePath, cfg)
 			if errSave == nil {
-				fmt.Println("\n  \x1b[97m[NOTE]\x1b[0m Config created: " + filePath)
+				fmt.Printf("\n  \x1b[97m[NOTE]\x1b[0m %s\n", Tf("common.config_made", filePath))
 			}
 			return cfg, nil
 		}
@@ -96,6 +122,14 @@ func LoadConfig(filePath string) (*Config, error) {
 			continue
 		}
 		key := strings.TrimSpace(parts[0])
+
+		// LANGUAGE is the one non-numeric setting, so it is handled before
+		// the Atoi below - which would otherwise reject it and skip the line.
+		if strings.EqualFold(key, "LANGUAGE") {
+			cfg.Language = strings.TrimSpace(parts[1])
+			continue
+		}
+
 		val, parseErr := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if parseErr != nil {
 			continue
@@ -157,6 +191,14 @@ func SaveConfig(filePath string, cfg *Config) error {
 		cfg.RamFileCache,
 		cfg.RamTrimWorkingSets,
 	)
+
+	// Preserve an explicit language override across saves. It is only written
+	// when the user actually set one, so a default config file stays free of
+	// a setting most people never touch.
+	if lang := strings.TrimSpace(cfg.Language); lang != "" {
+		content += fmt.Sprintf("LANGUAGE=%s\n", lang)
+	}
+
 	return os.WriteFile(filePath, []byte(content), 0644)
 }
 
@@ -233,5 +275,3 @@ func (c *Config) SetVal(index int, val int) {
 		c.RamTrimWorkingSets = val
 	}
 }
-
-

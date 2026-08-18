@@ -35,6 +35,29 @@ Every step can be customized in the menu settings, and your choices are saved au
 - **Smart Service Handling**: Background Windows services (like Windows Update & Delivery Optimization) are safely stopped before cleaning their cache files and automatically restarted afterward.
 - **Safe by Default**: Risky options like emptying the Recycle Bin are disabled by default. Deep system cleanup automatically resets back to OFF after every run so it cannot repeat accidentally.
 - **Single File & Portable**: No installer required. Just run `qc.exe` anywhere.
+- **Speaks Your Language**: The interface follows your Windows display language, falling back to English. English and Spanish ship today; adding a language takes one file and no code.
+
+---
+
+## Language
+
+Quiesce reads your Windows display language at startup. To change it, press
+**F** for settings, then **L**, pick a language by number, and press **E** to
+save. Your choice is remembered.
+
+You can also set it by hand in `cleaner_config.dat` (next to `qc.exe`):
+
+```text
+LANGUAGE=es
+```
+
+| Code | Language |
+|---|---|
+| `en` | English |
+| `es` | Español |
+
+Want your language? It takes one file, no Go code — see
+[docs/TRANSLATING.md](docs/TRANSLATING.md). Pull requests welcome.
 
 ---
 
@@ -49,6 +72,7 @@ Launch **`qc.exe`** as Administrator:
 Settings Controls:
   W / S    Move selection Up / Down
   D / A    Toggle step ON / OFF
+  L        Choose language
   E        Save & return to main menu
 ```
 
@@ -82,7 +106,7 @@ The commit hash and build time are stamped in automatically from git. To set an
 explicit version string:
 
 ```bash
-go build -ldflags "-X main.Version=2.2.0" -o qc.exe
+go build -ldflags "-X main.Version=2.4.0" -o qc.exe
 ```
 
 ---
