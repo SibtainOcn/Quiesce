@@ -1,6 +1,14 @@
 # Quiesce
 
-A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework - just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
+<img align="right" src="winres/icon.png" width="85" alt="Quiesce logo">
+
+A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework — just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
+
+---
+
+<p align="center">
+  <img src="docs/ss.png" alt="Quiesce main menu" width="580">
+</p>
 
 ---
 
@@ -139,5 +147,3 @@ Put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`) to run `qc` from any 
 - **Support**: If Quiesce saved your pc from clutter free junks, optimize and boost performance, feel free to support the project:
 
 <a href="https://buymeacoffee.com/sibtainocn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
-
-
