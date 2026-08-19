@@ -2,15 +2,10 @@
 
 <img align="right" src="winres/icon.png" width="85" alt="Quiesce logo">
 
-A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework — just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
+A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework, just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
 
 ---
 
-<p align="center">
-  <img src="docs/ss.png" alt="Quiesce main menu" width="580">
-</p>
-
----
 
 ## What It Cleans
 
