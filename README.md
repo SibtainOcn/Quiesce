@@ -6,11 +6,6 @@ A fast, lightweight Windows system cleaner and RAM optimizer. Single executable,
 
 ---
 
-<p align="center">
-  <img src="docs/ss.png" alt="Quiesce main menu" width="580">
-</p>
-
----
 
 ## What It Cleans
 
