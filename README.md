@@ -127,9 +127,6 @@ Put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`) to run `qc` from any 
 
 ---
 
-## Support & License
+## License
 
 - **License**: [GPL-3.0-or-later](LICENSE)
-- **Support**: If Quiesce saved your pc from clutter free junks, optimize and boost performance, feel free to support the project:
-
-<a href="https://buymeacoffee.com/REDACTED"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
