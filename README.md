@@ -1,5 +1,11 @@
 # Quiesce
-
+[![Go Version](https://img.shields.io/github/go-mod/go-version/SibtainOcn/Quiesce?color=00ADD8&logo=go&logoColor=white)](https://github.com/SibtainOcn/Quiesce/blob/main/go.mod)
+[![License: GPL v3+](https://img.shields.io/badge/License-GPLv3%2B-blue.svg)](https://github.com/SibtainOcn/Quiesce/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white)](https://github.com/SibtainOcn/Quiesce)
+[![Latest Release](https://img.shields.io/github/v/release/SibtainOcn/Quiesce?color=success&label=latest)](https://github.com/SibtainOcn/Quiesce/releases/latest)
+[![Total Downloads](https://img.shields.io/github/downloads/SibtainOcn/Quiesce/total?color=brightgreen)](https://github.com/SibtainOcn/Quiesce/releases)
+[![Stars](https://img.shields.io/github/stars/SibtainOcn/Quiesce?style=social)](https://github.com/SibtainOcn/Quiesce/stargazers)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sibtainocean)
 <img align="right" src="winres/icon.png" width="85" alt="Quiesce logo">
 
 A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework, just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
