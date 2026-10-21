@@ -6,7 +6,7 @@
 [![Total Downloads](https://img.shields.io/github/downloads/SibtainOcn/Quiesce/total?color=brightgreen)](https://github.com/SibtainOcn/Quiesce/releases)
 [![Stars](https://img.shields.io/github/stars/SibtainOcn/Quiesce?style=social)](https://github.com/SibtainOcn/Quiesce/stargazers)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sibtainocean)
-<img align="right" src="winres/icon.png" width="85" alt="Quiesce logo">
+<img align="right" src="assets/quiesce-logo.png" width="85" alt="Quiesce logo">
 
 A fast, lightweight Windows system cleaner and RAM optimizer. Single executable, zero installation, no heavy GUI framework, just a clean terminal interface with 12 customizable cleaning steps to free up disk space and speed up your PC safely.
 

@@ -5,6 +5,16 @@ All notable changes to Quiesce are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **New coloured logo** replaces the old black-and-white one, in the exe icon
+  and the README. Source in `assets/quiesce-logo-source.png`;
+  `tools/make-icons.py` crops it, removes the black background and writes
+  `assets/quiesce-logo.png` and `winres/icon/<size>.png` (16-256 px), then
+  `go-winres make --arch amd64,386` rebuilds the `.syso` resources.
+
 ## [2.4.0] - 2026-08-19
 
 ### Added
