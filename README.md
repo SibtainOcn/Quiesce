@@ -115,7 +115,7 @@ The commit hash and build time are stamped in automatically from git. To set an
 explicit version string:
 
 ```bash
-go build -ldflags "-X main.Version=2.4.0" -o qc.exe
+go build -trimpath -ldflags "-s -w -X main.Version=2.4.0" -o qc.exe
 ```
 
 ---
