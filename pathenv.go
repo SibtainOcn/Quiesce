@@ -20,8 +20,11 @@ package main
 // needs no Admin, then tells Windows so new terminals see it.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,18 +106,6 @@ func readPathValue(root registry.Key, key string) (string, uint32) {
 		return "", registry.EXPAND_SZ
 	}
 	return v, typ
-}
-
-// qcDir is the folder holding the running qc.exe.
-func qcDir() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	if real, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = real
-	}
-	return filepath.Dir(exe), nil
 }
 
 // inTempDir is true for folders that get cleaned, Quiesce's own User and
@@ -217,11 +208,143 @@ func RunPathCommand() int {
 	return code
 }
 
+// installTarget decides where `qc` should live. A qc.exe in a permanent
+// folder stays put; a download (any other name, or in Downloads, Desktop or
+// a temp folder) is copied to the per-user programs folder as qc.exe,
+// the way installers do, so nobody has to rename or move it.
+func installTarget() (exe, dir string, install bool, err error) {
+	exe, err = os.Executable()
+	if err != nil {
+		return "", "", false, err
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	dir = filepath.Dir(exe)
+	if strings.EqualFold(filepath.Base(exe), "qc.exe") && !inTempDir(dir) && !inDropFolder(dir) {
+		return exe, dir, false, nil
+	}
+	inst, err := installDir()
+	return exe, inst, true, err
+}
+
+// installDir is %LOCALAPPDATA%\Programs\Quiesce: per user, no Admin needed.
+func installDir() (string, error) {
+	base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, 0)
+	if err != nil || base == "" {
+		if base = os.Getenv("LOCALAPPDATA"); base == "" {
+			return "", errors.New("local app data folder not found")
+		}
+	}
+	return filepath.Join(base, "Programs", AppName), nil
+}
+
+// inDropFolder is true for Downloads and Desktop, where downloads land.
+func inDropFolder(dir string) bool {
+	d := normDir(dir)
+	for _, id := range []*windows.KNOWNFOLDERID{windows.FOLDERID_Downloads, windows.FOLDERID_Desktop} {
+		p, err := windows.KnownFolderPath(id, 0)
+		if p = normDir(p); err == nil && p != "" && (d == p || strings.HasPrefix(d, p+`\`)) {
+			return true
+		}
+	}
+	return false
+}
+
+// installCopy puts src into dir as qc.exe, replacing an older copy safely,
+// and brings the settings file along when the target has none.
+func installCopy(src, dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	target := filepath.Join(dir, "qc.exe")
+	if si, err := os.Stat(src); err == nil {
+		if ti, err := os.Stat(target); err == nil && os.SameFile(si, ti) {
+			return nil
+		}
+	}
+	if same, _ := sameContent(src, target); !same {
+		tmp := target + ".new"
+		_ = os.Remove(tmp)
+		if err := copyFile(src, tmp); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+		if _, err := os.Stat(target); err == nil {
+			if err := swapBinary(target, tmp); err != nil {
+				_ = os.Remove(tmp)
+				return err
+			}
+		} else if err := os.Rename(tmp, target); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+	}
+
+	cfgSrc := filepath.Join(filepath.Dir(src), "cleaner_config.dat")
+	cfgDst := filepath.Join(dir, "cleaner_config.dat")
+	if _, err := os.Stat(cfgDst); os.IsNotExist(err) {
+		if _, err := os.Stat(cfgSrc); err == nil {
+			_ = copyFile(cfgSrc, cfgDst)
+		}
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func fileHash(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func sameContent(a, b string) (bool, error) {
+	ha, err := fileHash(a)
+	if err != nil {
+		return false, err
+	}
+	hb, err := fileHash(b)
+	if err != nil {
+		return false, err
+	}
+	return ha == hb, nil
+}
+
 func addToPathAndReport() int {
-	dir, err := qcDir()
+	exe, dir, install, err := installTarget()
 	if err != nil {
 		printStepFail(Tf("env.fail", err))
 		return 1
+	}
+	if install {
+		if err := installCopy(exe, dir); err != nil {
+			printStepFail(Tf("env.install_fail", err))
+			return 1
+		}
+		printStepOK(Tf("env.installed", filepath.Join(dir, "qc.exe")))
 	}
 	res, err := addToUserPath(dir)
 	switch {
@@ -243,6 +366,9 @@ func addToPathAndReport() int {
 	}
 	if other := shadowingQc(dir); other != "" {
 		fmt.Printf("\n  %s%s%s\n", YELLOW, Tf("env.other", other), RST)
+	}
+	if install && normDir(filepath.Dir(exe)) != normDir(dir) && !inTempDir(filepath.Dir(exe)) {
+		fmt.Printf("\n  %s%s%s\n", DIM, Tf("env.delete_download", exe), RST)
 	}
 	return 0
 }
@@ -279,17 +405,21 @@ func RunRepoCommand() int {
 // OfferAddToPath is the first-run question; it is skipped when Quiesce is
 // already on PATH or sits in a temporary folder.
 func OfferAddToPath() {
-	dir, err := qcDir()
-	if err != nil || inTempDir(dir) {
+	_, dir, install, err := installTarget()
+	if err != nil {
 		return
 	}
 	sys, _ := readPathValue(registry.LOCAL_MACHINE, systemEnvKey)
 	user, _ := readPathValue(registry.CURRENT_USER, userEnvKey)
-	if pathHas(user, dir) || pathHas(sys, dir) {
+	if !install && (pathHas(user, dir) || pathHas(sys, dir)) {
 		return
 	}
 
-	fmt.Printf("\n  %s ", T("env.first_run"))
+	question := T("env.first_run")
+	if install {
+		question = T("env.first_install")
+	}
+	fmt.Printf("\n  %s ", question)
 	FlushKeyBuffer()
 	yes := false
 	for {

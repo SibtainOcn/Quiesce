@@ -242,6 +242,10 @@
 
 # --- qc env (add to PATH) ---
 "env.first_run" = "Add Quiesce to your PATH, so you can run qc from any terminal? [Y/n]"
+"env.first_install" = "Install Quiesce, so you can run qc from any terminal? [Y/n]"
+"env.installed" = "Installed %s"
+"env.install_fail" = "Could not install: %v"
+"env.delete_download" = "You can delete the downloaded %s once you close it."
 "env.skipped" = "Skipped - run %s env any time to add it."
 "env.added" = "Added %s to your PATH"
 "env.already" = "Quiesce is already on your PATH (%s)"
