@@ -81,6 +81,11 @@ Launch **`qc.exe`** as Administrator:
 While Cleaning:
   P        Pause / resume
   Q        Abort (stops safely, restarts any stopped services)
+  Ctrl+C   Same as Q
+
+Summary Screen:
+  Up/Down  Scroll (also W / S, PgUp / PgDn)
+  ENTER    Exit
 
 Settings Controls:
   W / S    Move selection Up / Down
@@ -92,8 +97,12 @@ Settings Controls:
 While cleaning runs, the window shows a live screen: deleted files scroll on
 the left, a checklist of steps stays pinned on the right, and the bottom lines
 show progress, items removed, space freed, elapsed time and live CPU/RAM
-usage. On a narrow window the checklist hides, and if the console can't draw
-the live screen Quiesce falls back to plain line-by-line output.
+usage. When the run ends, the summary appears in place of the file log, so
+the layout never scrolls. The window opens maximized when Quiesce asks for
+Administrator rights. On a narrow window the checklist hides, and if the
+console can't draw the live screen Quiesce falls back to plain line-by-line
+output. Closing the window mid-run still restarts any Windows service that
+was stopped for cleaning.
 
 The live screen keeps only recent lines. To keep the full list of what was
 removed, switch on **Save a log file of each run** in settings: each run is

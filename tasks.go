@@ -23,6 +23,7 @@ package main
 // or app cache cleaning and the telemetry scan can be others.
 
 import (
+	"errors"
 	"time"
 )
 
@@ -50,6 +51,21 @@ type RunReport struct {
 	Elapsed time.Duration
 	LogPath string // empty when no log file was kept
 	LogErr  error
+
+	// ExitConfirmed is true when the user already pressed ENTER on the
+	// summary screen, so the caller must not ask again.
+	ExitConfirmed bool
+}
+
+// RunOptions configures a run.
+type RunOptions struct {
+	// LogDir, when not empty, keeps a plain-text log of the run there.
+	LogDir string
+
+	// Summary builds the end-of-run summary from the report. It is shown in
+	// place of the log, inside the live layout, so nothing is ever printed
+	// below the screen. Nil means no summary.
+	Summary func(rep RunReport) []string
 }
 
 // TaskCtx is what a running task uses to report progress and to cooperate
@@ -70,16 +86,20 @@ func (tc *TaskCtx) Aborted() bool    { return tc.v.Aborted() }
 func (tc *TaskCtx) SetTotal(n int) { tc.v.SetTotal(n) }
 
 // WithService stops a Windows service, runs fn, and restarts the service -
-// even if fn panics or the run is aborted.
+// even if fn panics, the run is aborted, or the window is closed (the
+// shutdown handler restarts every service still marked stopped).
 func (tc *TaskCtx) WithService(name string, fn func()) {
 	stopService(name)
-	defer startService(name)
+	markServiceStopped(name)
+	defer func() {
+		startService(name)
+		markServiceRestarted(name)
+	}()
 	fn()
 }
 
-// RunTasks runs tasks in order on the live screen. logDir, when not empty,
-// keeps a plain-text log of the run there.
-func RunTasks(tasks []Task, logDir string) (rep RunReport) {
+// RunTasks runs tasks in order on the live screen, then shows the summary.
+func RunTasks(tasks []Task, opts RunOptions) (rep RunReport) {
 	names := make([]string, len(tasks))
 	enabled := make([]bool, len(tasks))
 	for i, t := range tasks {
@@ -87,15 +107,23 @@ func RunTasks(tasks []Task, logDir string) (rep RunReport) {
 		enabled[i] = t.Enabled
 	}
 
-	v := NewLiveView(names, enabled, logDir)
+	v := NewLiveView(names, enabled, opts.LogDir)
 	rep.Ran = make([]bool, len(tasks))
 
 	// The screen is always closed - cursor shown, log flushed - even if
 	// something below panics outside a task.
 	defer func() {
+		_, logErr := v.Close()
+		rep.LogErr = errors.Join(rep.LogErr, logErr)
+	}()
+	defer func() {
+		v.Finish()
 		rep.Aborted = v.Aborted()
 		rep.Items, rep.Bytes, rep.Elapsed = v.Totals()
-		rep.LogPath, rep.LogErr = v.Close()
+		rep.LogPath, rep.LogErr = v.logPath, v.logErr
+		if opts.Summary != nil {
+			rep.ExitConfirmed = v.ShowSummary(opts.Summary(rep))
+		}
 	}()
 
 	tc := &TaskCtx{v: v}

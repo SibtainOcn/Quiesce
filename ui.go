@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -764,18 +765,31 @@ func RunLanguageScreen(cfg *Config, configFilePath string) {
 	}
 }
 
+// PrintSummary prints the end-of-run summary to the console.
 func PrintSummary(cfg *Config, results StepResults) {
-	fmt.Println()
-	fmt.Println("+---------------------------------------+")
-	fmt.Println(centerInBox(T("summary.title")))
-	fmt.Println("+---------------------------------------+")
-	fmt.Println()
-	fmt.Printf("  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
-	fmt.Printf("  %s\n", Tf("summary.skipped", results.TotalFailed))
+	WriteSummary(os.Stdout, cfg, results)
+}
+
+// SummaryLines returns the summary as colored lines, for the live screen.
+func SummaryLines(cfg *Config, results StepResults) []string {
+	var b strings.Builder
+	WriteSummary(&b, cfg, results)
+	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+}
+
+// WriteSummary writes the end-of-run summary to w.
+func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w, centerInBox(T("summary.title")))
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
+	fmt.Fprintf(w, "  %s\n", Tf("summary.skipped", results.TotalFailed))
 	if results.Aborted {
-		fmt.Printf("  %s%s%s\n", YELLOW, T("summary.aborted"), RST)
+		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, T("summary.aborted"), RST)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	// Summary labels are padded to the widest translated label rather than
 	// carrying typed trailing spaces, so the ":" column holds in any language.
@@ -794,7 +808,7 @@ func PrintSummary(cfg *Config, results StepResults) {
 	// line prints one summary row: "  [n] <label> : <value>".
 	line := func(idx int, value string) {
 		name := padRight(T(fmt.Sprintf("step.%d.short", idx)), nameW)
-		fmt.Printf("  %-5s%s : %s\n", fmt.Sprintf("[%d]", idx), name, value)
+		fmt.Fprintf(w, "  %-5s%s : %s\n", fmt.Sprintf("[%d]", idx), name, value)
 	}
 	dim := func(s string) string { return CYAN + s + RST }
 
@@ -855,7 +869,7 @@ func PrintSummary(cfg *Config, results StepResults) {
 				if r.Trimmed > 0 || r.TrimSkipped > 0 {
 					detail = Tf("summary.procs", detail, r.Trimmed, r.TrimSkipped)
 				}
-				fmt.Printf("       %s%s%s\n", CYAN, Tf("summary.ran", detail), RST)
+				fmt.Fprintf(w, "       %s%s%s\n", CYAN, Tf("summary.ran", detail), RST)
 			}
 
 		case s.idx == 11:
@@ -886,20 +900,20 @@ func PrintSummary(cfg *Config, results StepResults) {
 			deepState = RED + T("summary.completed") + RST
 		}
 	}
-	fmt.Printf("  %-5s%s : %s\n", "[12]", deepTag, deepState)
+	fmt.Fprintf(w, "  %-5s%s : %s\n", "[12]", deepTag, deepState)
 
-	fmt.Println()
-	fmt.Println("+---------------------------------------+")
-	fmt.Printf("  %s\n", T("summary.all_done"))
-	fmt.Println("+---------------------------------------+")
-	fmt.Println()
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintf(w, "  %s\n", T("summary.all_done"))
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w)
 	if results.LogPath != "" {
-		fmt.Printf("  %s\n", Tf("summary.log_saved", results.LogPath))
+		fmt.Fprintf(w, "  %s\n", Tf("summary.log_saved", results.LogPath))
 	}
 	if results.LogErr != "" {
-		fmt.Printf("  %s%s%s\n", YELLOW, Tf("summary.log_fail", results.LogErr), RST)
+		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, Tf("summary.log_fail", results.LogErr), RST)
 	}
-	fmt.Printf("  %s\n", VersionLine())
-	fmt.Printf("  %s%s%s\n", CYAN, Repo, RST)
-	fmt.Println()
+	fmt.Fprintf(w, "  %s\n", VersionLine())
+	fmt.Fprintf(w, "  %s%s%s\n", CYAN, Repo, RST)
+	fmt.Fprintln(w)
 }

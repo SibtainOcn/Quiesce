@@ -22,16 +22,20 @@ package main
 // same screen by handing RunTasks a different task list.
 //
 //	+--------------------------------------+---------------------+
-//	| scrolling log (last N lines)         | task checklist      |
+//	| scrolling log - or, once finished,   | task checklist      |
+//	| the summary (scroll with up/down)    | (pinned)            |
 //	+--------------------------------------+---------------------+
 //	| spinner  [3/12] Prefetch  ━━━──  42% | items | MB | time   |  <- status
 //	| CPU 12%  ·  MEMORY 6.21/15.8 GB 39%       [P] pause [Q] abort  <- footer
 //
-// The screen is redrawn from memory about 12 times a second by one goroutine,
-// so worker goroutines never write to the console directly and output can't
-// interleave. When the console can't do this (no VT support, output
-// redirected, window too small) the view falls back to plain line-by-line
-// printing - the same output Quiesce always had.
+// The whole layout owns the window from start to exit: nothing is ever
+// printed below it, so nothing can scroll it out of place. One goroutine
+// redraws it about 12 times a second, writing only the rows that changed.
+// Worker goroutines never write to the console directly.
+//
+// When the console can't do this (no VT support, output redirected, window
+// too small) the view falls back to plain line-by-line printing - the same
+// output Quiesce always had.
 
 import (
 	"bufio"
@@ -43,16 +47,28 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-var procKbhit = modmsvcrt.NewProc("_kbhit")
+var (
+	procKbhit                   = modmsvcrt.NewProc("_kbhit")
+	procGetConsoleWindow        = modkernel32Title.NewProc("GetConsoleWindow")
+	procGetCurrentConsoleFontEx = modkernel32Title.NewProc("GetCurrentConsoleFontEx")
+	procGetClassNameW           = moduser32.NewProc("GetClassNameW")
+	procShowWindow              = moduser32.NewProc("ShowWindow")
+)
 
 // forcePlainView keeps the view off the console: no live screen, no
 // keyboard reading. Tests set it so a `go test` run in a terminal doesn't
 // clear the screen or eat keystrokes.
 var forcePlainView bool
+
+// activeView is the view currently on screen, if any. The shutdown handler
+// uses it to abort a run on Ctrl+C and to flush the log when the window is
+// closed.
+var activeView atomic.Pointer[LiveView]
 
 // LogKind picks how a log line is colored. The text itself is stored plain,
 // so it can be clipped to the pane width and written to the log file as-is.
@@ -109,40 +125,63 @@ const (
 
 	detailW = 10 // width of the value column in the checklist
 	barW    = 20 // width of the progress bar on the status line
+
+	// Key codes from _getch. Arrow and paging keys arrive as a 0 or 0xE0
+	// prefix followed by one of the scan codes below.
+	keyEnter = 13
+	scanUp   = 72
+	scanDown = 80
+	scanPgUp = 73
+	scanPgDn = 81
+	scanHome = 71
+	scanEnd  = 79
 )
 
-// glyphSet holds the symbols drawn on screen. Windows Terminal's default
-// font has braille and check marks; the legacy console font (Consolas) does
-// not, and would draw empty boxes, so plain ASCII is used there.
+// glyphSet holds the symbols drawn on screen. Windows Terminal and Cascadia
+// fonts have braille and check marks; the legacy console font (Consolas)
+// does not, and would draw empty boxes, so plain symbols are used there.
 type glyphSet struct {
-	spin  []string
-	check string
-	pend  string
-	off   string
-	warn  string
+	spin   []string
+	check  string
+	pend   string
+	off    string
+	warn   string
+	paused string
 }
 
 var (
 	fancyGlyphs = glyphSet{
 		spin:  []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-		check: "✓", pend: "·", off: "-", warn: "!",
+		check: "✓", pend: "·", off: "-", warn: "!", paused: "‖",
 	}
 	basicGlyphs = glyphSet{
 		spin:  []string{"|", "/", "-", `\`},
-		check: "+", pend: ".", off: "-", warn: "!",
+		check: "√", pend: ".", off: "-", warn: "!", paused: "=",
 	}
 )
 
+// pickGlyphs chooses fancy symbols for Windows Terminal (and other modern
+// hosts, which run behind a pseudo console) and for a classic console set to
+// a Cascadia font; plain ones otherwise.
 func pickGlyphs() glyphSet {
 	if os.Getenv("WT_SESSION") != "" || os.Getenv("TERM_PROGRAM") != "" {
 		return fancyGlyphs
+	}
+	switch consoleWindowClass() {
+	case "PseudoConsoleWindow":
+		return fancyGlyphs
+	case "ConsoleWindowClass":
+		if strings.HasPrefix(consoleFontFace(), "Cascadia") {
+			return fancyGlyphs
+		}
 	}
 	return basicGlyphs
 }
 
 type LiveView struct {
-	live   bool
-	glyphs glyphSet
+	live        bool
+	interactive bool
+	glyphs      glyphSet
 
 	mu        sync.Mutex // guards everything below up to the atomics
 	ring      [logRingSize]logLine
@@ -159,8 +198,13 @@ type LiveView struct {
 	pausedAt  time.Time
 	pausedFor time.Duration
 	finished  bool
+	final     []string // summary shown in the log pane once finished
+	finalTop  int      // first summary line on screen
+	finalRows int      // rows the log pane had at the last draw
+	finalW    int      // widest summary line
 	lastW     int
 	lastH     int
+	prevRows  []string // rows as last written, to redraw only changes
 	runLog    *runLog
 	logPath   string
 	logErr    error
@@ -175,6 +219,8 @@ type LiveView struct {
 	paused  atomic.Bool
 	aborted atomic.Bool
 
+	exit      chan struct{} // closed when ENTER is pressed on the summary
+	exitOnce  sync.Once
 	stop      chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
@@ -186,10 +232,11 @@ type LiveView struct {
 // in the log and the run carries on without it.
 func NewLiveView(names []string, enabled []bool, logDir string) *LiveView {
 	v := &LiveView{
-		glyphs: pickGlyphs(),
+		glyphs: basicGlyphs,
 		cur:    -1,
 		start:  time.Now(),
 		stop:   make(chan struct{}),
+		exit:   make(chan struct{}),
 	}
 	v.pcond = sync.NewCond(&v.pmu)
 
@@ -210,18 +257,22 @@ func NewLiveView(names []string, enabled []bool, logDir string) *LiveView {
 			v.logErr = err
 		} else {
 			v.runLog = l
+			v.logPath = l.path
 			l.line(Tf("log.header", AppName, Version, v.start.Format("2006-01-02 15:04:05")))
 			l.line("")
 		}
 	}
 
-	w, h, ok := consoleSize()
-	v.live = !forcePlainView && ok && stdoutSupportsVT() && w >= minLiveCols && h >= minLiveRows
-	interactive := !forcePlainView && stdinIsConsole()
+	if !forcePlainView {
+		w, h, ok := consoleSize()
+		v.live = ok && stdoutSupportsVT() && w >= minLiveCols && h >= minLiveRows
+		v.interactive = stdinIsConsole()
+		v.glyphs = pickGlyphs()
+	}
 
 	// Anything typed before the run started (a held ENTER, say) must not be
-	// read as P or Q.
-	if interactive {
+	// read as P, Q or the final ENTER.
+	if v.interactive {
 		FlushKeyBuffer()
 	}
 
@@ -233,11 +284,12 @@ func NewLiveView(names []string, enabled []bool, logDir string) *LiveView {
 		go v.renderLoop()
 		go v.statsLoop()
 	}
-	if interactive {
+	if v.interactive {
 		v.wg.Add(1)
 		go v.keyLoop()
 	}
 
+	activeView.Store(v)
 	if v.logErr != nil {
 		v.Log(LogWarn, Tf("summary.log_fail", v.logErr))
 	}
@@ -352,8 +404,14 @@ func (v *LiveView) Checkpoint() bool {
 	return !v.aborted.Load()
 }
 
-// Aborted reports whether the user pressed Q.
+// Aborted reports whether the run was aborted (Q or Ctrl+C).
 func (v *LiveView) Aborted() bool { return v.aborted.Load() }
+
+func (v *LiveView) isFinished() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.finished
+}
 
 // TogglePause pauses or resumes the run. Work in progress finishes its
 // current item first; nothing is interrupted halfway.
@@ -391,7 +449,7 @@ func (v *LiveView) TogglePause() {
 // Abort stops the run at the next checkpoint. Services stopped by a task are
 // still restarted, because tasks restart them with defer.
 func (v *LiveView) Abort() {
-	if v.aborted.Swap(true) {
+	if v.isFinished() || v.aborted.Swap(true) {
 		return
 	}
 	v.pmu.Lock()
@@ -413,53 +471,120 @@ func (v *LiveView) Totals() (items, bytes int64, elapsed time.Duration) {
 	return v.items.Load(), v.bytes.Load(), v.elapsedLocked(time.Now())
 }
 
-// Close stops the background goroutines, draws the final frame, leaves the
-// cursor below it and closes the log file. It is safe to call more than once.
+// Finish marks the run as over: the clock stops, the status line shows
+// [DONE] or [ABORTED], and P/Q no longer do anything.
+func (v *LiveView) Finish() {
+	now := time.Now()
+	v.mu.Lock()
+	if v.finished {
+		v.mu.Unlock()
+		return
+	}
+	if v.paused.Load() {
+		v.pausedFor += now.Sub(v.pausedAt)
+	}
+	v.finished = true
+	v.endAt = now
+	v.mu.Unlock()
+
+	v.pmu.Lock()
+	v.paused.Store(false)
+	v.pcond.Broadcast()
+	v.pmu.Unlock()
+}
+
+// ShowSummary puts the end-of-run summary on screen and writes it to the log
+// file. On the live screen it replaces the log pane - the checklist and
+// status lines stay where they are - and waits for ENTER, returning true.
+// In plain mode it prints the lines and returns false, leaving the "press
+// ENTER" prompt to the caller.
+func (v *LiveView) ShowSummary(lines []string) (waitedForExit bool) {
+	v.Finish()
+	v.mu.Lock()
+	for _, l := range lines {
+		v.runLog.line(stripANSI(l))
+	}
+	if !v.live {
+		v.mu.Unlock()
+		for _, l := range lines {
+			fmt.Println(l)
+		}
+		return false
+	}
+	v.final = lines
+	v.finalTop = 0
+	v.finalW = 0
+	for _, l := range lines {
+		v.finalW = max(v.finalW, visibleWidth(l))
+	}
+	v.mu.Unlock()
+
+	if !v.interactive {
+		return false
+	}
+	<-v.exit
+	return true
+}
+
+// scrollSummary moves the summary by delta lines, clamped to its length.
+func (v *LiveView) scrollSummary(delta int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	maxTop := max(0, len(v.final)-v.finalRows)
+	v.finalTop = min(max(0, v.finalTop+delta), maxTop)
+}
+
+// Close stops the background goroutines, draws the final frame, restores
+// the cursor and closes the log file. It is safe to call more than once.
 func (v *LiveView) Close() (logPath string, logErr error) {
 	v.closeOnce.Do(func() {
-		now := time.Now()
-		v.mu.Lock()
-		if v.paused.Load() {
-			v.pausedFor += now.Sub(v.pausedAt)
-		}
-		v.finished = true
-		v.endAt = now
-		v.mu.Unlock()
-
-		v.pmu.Lock()
-		v.paused.Store(false)
-		v.pcond.Broadcast()
-		v.pmu.Unlock()
-
+		v.Finish()
 		close(v.stop)
 		v.wg.Wait()
 
 		if v.live {
 			v.render()
+			// Leave the cursor on the bottom row, cleared, so a shell
+			// prompt that follows (when run from an existing terminal)
+			// lands there instead of scrolling the screen.
 			_, h, ok := consoleSize()
 			if !ok {
 				h = v.lastH
 			}
-			// Park below the frame and show the cursor again; whatever is
-			// printed next (the summary) scrolls the frame up.
-			fmt.Printf("\x1b[%d;1H\n\x1b[?25h", h)
+			fmt.Printf("\x1b[%d;1H\x1b[2K\x1b[?25h", h)
 		}
 
 		v.mu.Lock()
-		if v.runLog != nil {
-			v.runLog.line("")
-			v.runLog.line(Tf("log.footer", formatElapsed(v.elapsedLocked(now)),
-				v.items.Load(), FormatBytesHuman(uint64(v.bytes.Load()))))
-			path, err := v.runLog.close()
-			v.logPath = path
-			if err != nil {
-				v.logErr = err
-			}
-			v.runLog = nil
-		}
+		v.closeLogLocked()
 		v.mu.Unlock()
+		activeView.CompareAndSwap(v, nil)
 	})
 	return v.logPath, v.logErr
+}
+
+// emergencyClose is used when the process is about to be killed (window
+// closed, logoff): it saves the log without waiting for anything.
+func (v *LiveView) emergencyClose() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.runLog != nil {
+		v.runLog.line("")
+		v.runLog.line(T("live.closed_log"))
+	}
+	v.closeLogLocked()
+}
+
+func (v *LiveView) closeLogLocked() {
+	if v.runLog == nil {
+		return
+	}
+	v.runLog.line("")
+	v.runLog.line(Tf("log.footer", formatElapsed(v.elapsedLocked(time.Now())),
+		v.items.Load(), FormatBytesHuman(uint64(v.bytes.Load()))))
+	if _, err := v.runLog.close(); err != nil {
+		v.logErr = err
+	}
+	v.runLog = nil
 }
 
 // --- Background goroutines ------------------------------------------------
@@ -503,7 +628,7 @@ func (v *LiveView) statsLoop() {
 }
 
 // keyLoop polls the keyboard without blocking, so it can stop as soon as
-// the run ends and never swallows a key meant for the next prompt.
+// the view closes and never swallows a key meant for the next prompt.
 func (v *LiveView) keyLoop() {
 	defer v.wg.Done()
 	defer func() { _ = recover() }()
@@ -523,22 +648,56 @@ func (v *LiveView) keyLoop() {
 			if r, _, _ := procKbhit.Call(); r == 0 {
 				break
 			}
-			ch := ReadSingleKey()
-			// Arrow and function keys arrive as two codes: a 0 or 0xE0
-			// prefix, then a scan code. Down-arrow's scan code is 'P', so
-			// the second code must be consumed, not treated as a key.
-			if ch == 0 || ch == 0xE0 {
-				ReadSingleKey()
-				continue
-			}
-			switch ch {
-			case 'p', 'P':
-				v.TogglePause()
-			case 'q', 'Q':
-				v.Abort()
-			}
+			v.handleKey(ReadSingleKey())
 		}
 	}
+}
+
+func (v *LiveView) handleKey(ch rune) {
+	// Arrow and paging keys arrive as two codes. The second is a scan code,
+	// and down-arrow's happens to be 'P', so it must never be read as P.
+	if ch == 0 || ch == 0xE0 {
+		page := max(1, v.pageRows()-1)
+		switch ReadSingleKey() {
+		case scanUp:
+			v.scrollSummary(-1)
+		case scanDown:
+			v.scrollSummary(1)
+		case scanPgUp:
+			v.scrollSummary(-page)
+		case scanPgDn:
+			v.scrollSummary(page)
+		case scanHome:
+			v.scrollSummary(-1 << 20)
+		case scanEnd:
+			v.scrollSummary(1 << 20)
+		}
+		return
+	}
+
+	if v.isFinished() {
+		switch ch {
+		case keyEnter:
+			v.exitOnce.Do(func() { close(v.exit) })
+		case 'w', 'W':
+			v.scrollSummary(-1)
+		case 's', 'S':
+			v.scrollSummary(1)
+		}
+		return
+	}
+	switch ch {
+	case 'p', 'P':
+		v.TogglePause()
+	case 'q', 'Q':
+		v.Abort()
+	}
+}
+
+func (v *LiveView) pageRows() int {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.finalRows
 }
 
 // --- Drawing ---------------------------------------------------------------
@@ -551,59 +710,101 @@ func (v *LiveView) render() {
 	v.mu.Lock()
 	frame := v.frameLocked(w, h, time.Now())
 	v.mu.Unlock()
-	_, _ = os.Stdout.WriteString(frame)
+	if frame != "" {
+		_, _ = os.Stdout.WriteString(frame)
+	}
 }
 
-// frameLocked builds one full screen. Every row is positioned explicitly and
-// kept to w-1 visible columns: writing into the last column makes some
-// consoles wrap, which would scroll the whole frame.
+// frameLocked returns what must be written to bring the screen up to date:
+// every row after a resize, otherwise only the rows that changed. Every row
+// is positioned explicitly and kept to w-1 visible columns - writing into
+// the last column makes some consoles wrap, which would scroll the screen.
 func (v *LiveView) frameLocked(w, h int, now time.Time) string {
+	rows := v.rowsLocked(w, h, now)
+
 	var b strings.Builder
-	b.Grow(w * h * 2)
-
-	if w != v.lastW || h != v.lastH {
-		b.WriteString("\x1b[2J") // window resized: start from a clean slate
+	full := w != v.lastW || h != v.lastH || len(v.prevRows) != len(rows)
+	if full {
+		// Resized: wipe the screen and the scrollback, where the console
+		// may have reflowed old frames.
+		b.WriteString("\x1b[2J\x1b[3J")
 		v.lastW, v.lastH = w, h
+		v.prevRows = make([]string, len(rows))
 	}
+	for i, r := range rows {
+		if full || r != v.prevRows[i] {
+			b.WriteString(r)
+			v.prevRows[i] = r
+		}
+	}
+	return b.String()
+}
 
+// invalidate forces the next frame to redraw every row.
+func (v *LiveView) invalidate() { v.lastW, v.lastH = 0, 0 }
+
+func (v *LiveView) rowsLocked(w, h int, now time.Time) []string {
 	cols := w - 1
 	logRows := h - 3
 	panelW := v.nameW + 7 + detailW
-	showPanel := logRows >= len(v.tasks)+2 && cols-panelW-1 >= minLogCols
+	minLeft := minLogCols
+	if v.final != nil {
+		// The summary repeats every step's result, so on a window too
+		// narrow for both, the summary gets the full width.
+		minLeft = max(minLeft, v.finalW)
+	}
+	showPanel := logRows >= len(v.tasks)+2 && cols-panelW-1 >= minLeft
 	logW := cols
 	if showPanel {
 		logW = cols - panelW - 1
 	}
+	v.finalRows = logRows
 
-	lines := v.tailLocked(logRows)
-	offset := logRows - len(lines)
+	left := v.paneLinesLocked(logRows)
+	rows := make([]string, 0, h)
 	for r := 0; r < logRows; r++ {
-		fmt.Fprintf(&b, "\x1b[%d;1H", r+1)
-		left := ""
-		if i := r - offset; i >= 0 {
-			left = clipANSI(renderLogLine(lines[i]), logW)
-		}
-		b.WriteString(left)
-		b.WriteString("\x1b[K")
+		row := fmt.Sprintf("\x1b[%d;1H%s\x1b[K", r+1, clipANSI(left[r], logW))
 		if showPanel {
-			// The divider is placed by jumping to its column, not by padding
-			// after the log text. If a file name holds a character the
+			// The divider is placed by jumping to its column, not by
+			// padding after the text. If a file name holds a character the
 			// terminal draws wider or narrower than counted, the log text
 			// may end up off by a column, but the divider and the panel
 			// stay in a straight line.
-			fmt.Fprintf(&b, "\x1b[%d;%dH%s│%s%s", r+1, logW+1, DIM, RST,
+			row += fmt.Sprintf("\x1b[%d;%dH%s│%s%s", r+1, logW+1, DIM, RST,
 				clipANSI(v.panelLineLocked(r, now), panelW))
 		}
+		rows = append(rows, row)
 	}
 
 	sep := strings.Repeat("─", logW)
 	if showPanel {
 		sep += "┴" + strings.Repeat("─", panelW)
 	}
-	fmt.Fprintf(&b, "\x1b[%d;1H%s%s%s\x1b[K", logRows+1, DIM, sep, RST)
-	fmt.Fprintf(&b, "\x1b[%d;1H%s\x1b[K", logRows+2, clipANSI(v.statusLocked(cols, now), cols))
-	fmt.Fprintf(&b, "\x1b[%d;1H%s\x1b[K", logRows+3, clipANSI(v.footerLocked(cols), cols))
-	return b.String()
+	rows = append(rows,
+		fmt.Sprintf("\x1b[%d;1H%s%s%s\x1b[K", logRows+1, DIM, sep, RST),
+		fmt.Sprintf("\x1b[%d;1H%s\x1b[K", logRows+2, clipANSI(v.statusLocked(cols, now), cols)),
+		fmt.Sprintf("\x1b[%d;1H%s\x1b[K", logRows+3, clipANSI(v.footerLocked(cols), cols)),
+	)
+	return rows
+}
+
+// paneLinesLocked returns exactly n colored lines for the left pane: the
+// summary once the run is finished, otherwise the tail of the log.
+func (v *LiveView) paneLinesLocked(n int) []string {
+	out := make([]string, n)
+	if v.final != nil {
+		v.finalTop = min(v.finalTop, max(0, len(v.final)-n))
+		for i := 0; i < n && v.finalTop+i < len(v.final); i++ {
+			out[i] = v.final[v.finalTop+i]
+		}
+		return out
+	}
+	lines := v.tailLocked(n)
+	offset := n - len(lines)
+	for i, l := range lines {
+		out[offset+i] = renderLogLine(l)
+	}
+	return out
 }
 
 // tailLocked returns the last n log lines, oldest first.
@@ -651,10 +852,7 @@ func (v *LiveView) panelLineLocked(r int, now time.Time) string {
 	case taskRunning:
 		icon := RED + v.spinner(now) + RST
 		if v.paused.Load() {
-			icon = YELLOW + "‖" + RST
-			if v.glyphs.check == basicGlyphs.check {
-				icon = YELLOW + "=" + RST
-			}
+			icon = YELLOW + g.paused + RST
 		}
 		prog := ""
 		if total := v.stepTotal.Load(); total > 0 {
@@ -753,6 +951,10 @@ func (v *LiveView) footerLocked(cols int) string {
 
 	keys := ""
 	switch {
+	case v.final != nil && len(v.final) > v.finalRows:
+		keys = T("live.keys_scroll")
+	case v.final != nil:
+		keys = T("live.keys_exit")
 	case v.finished:
 	case v.aborted.Load():
 		keys = T("live.keys_stopping")
@@ -765,7 +967,7 @@ func (v *LiveView) footerLocked(cols int) string {
 	if keys == "" || gap < 2 {
 		return left
 	}
-	return left + strings.Repeat(" ", gap) + DIM + keys + RST
+	return left + strings.Repeat(" ", gap) + WHITE + keys + RST
 }
 
 // renderLogLine colors a log line for the screen.
@@ -799,7 +1001,12 @@ func plainLogLine(l logLine) string {
 	return stripANSI(renderLogLine(l))
 }
 
+// formatElapsed shows tenths of a second for short runs, where "00:00"
+// would say nothing, and mm:ss (or h:mm:ss) beyond a minute.
 func formatElapsed(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
 	s := int(d.Seconds())
 	if s >= 3600 {
 		return fmt.Sprintf("%d:%02d:%02d", s/3600, s/60%60, s%60)
@@ -877,6 +1084,75 @@ func stdinIsConsole() bool {
 	}
 	var mode uint32
 	return windows.GetConsoleMode(hnd, &mode) == nil
+}
+
+func consoleHWND() uintptr {
+	if procGetConsoleWindow.Find() != nil {
+		return 0
+	}
+	h, _, _ := procGetConsoleWindow.Call()
+	return h
+}
+
+// consoleWindowClass tells the hosts apart: "ConsoleWindowClass" is the
+// classic console (conhost); "PseudoConsoleWindow" means a modern terminal
+// such as Windows Terminal draws the window.
+func consoleWindowClass() string {
+	hwnd := consoleHWND()
+	if hwnd == 0 || procGetClassNameW.Find() != nil {
+		return ""
+	}
+	buf := make([]uint16, 64)
+	n, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return windows.UTF16ToString(buf[:n])
+}
+
+// consoleFontFace returns the classic console's font name.
+func consoleFontFace() string {
+	if procGetCurrentConsoleFontEx.Find() != nil {
+		return ""
+	}
+	hnd, err := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
+	if err != nil {
+		return ""
+	}
+	var f struct {
+		size   uint32
+		index  uint32
+		fontW  int16
+		fontH  int16
+		family uint32
+		weight uint32
+		face   [32]uint16
+	}
+	f.size = uint32(unsafe.Sizeof(f))
+	if r, _, _ := procGetCurrentConsoleFontEx.Call(uintptr(hnd), 0, uintptr(unsafe.Pointer(&f))); r == 0 {
+		return ""
+	}
+	return windows.UTF16ToString(f.face[:])
+}
+
+// Smallest window that shows the live screen comfortably: room for the log
+// and the checklist side by side, and every checklist row.
+const (
+	comfyCols = 120
+	comfyRows = 35
+)
+
+// EnsureRoomyWindow maximizes a classic console window that is smaller than
+// the live screen needs. Windows Terminal ignores this request; there the
+// window is opened maximized when Quiesce relaunches as administrator (see
+// EnsureAdmin).
+func EnsureRoomyWindow() {
+	w, h, ok := consoleSize()
+	if !ok || (w >= comfyCols && h >= comfyRows) {
+		return
+	}
+	if consoleWindowClass() != "ConsoleWindowClass" || procShowWindow.Find() != nil {
+		return
+	}
+	const swMaximize = 3
+	procShowWindow.Call(consoleHWND(), swMaximize)
 }
 
 // --- Text width helpers --------------------------------------------------------

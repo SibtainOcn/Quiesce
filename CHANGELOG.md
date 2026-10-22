@@ -17,6 +17,15 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Pause and abort.** `P` pauses or resumes; `Q` aborts after the current
   item. Services stopped for a step are always restarted, and the summary
   marks steps that never ran as `not run`.
+- **Summary inside the live screen.** The end-of-run summary replaces the
+  file log, with the checklist and status lines staying pinned; scroll with
+  Up/Down (or W/S, PgUp/PgDn), ENTER exits. Nothing prints below the
+  layout, so it never scrolls out of place.
+- **Roomy window on first launch.** The admin relaunch opens Windows
+  Terminal maximized; a small classic console window is maximized.
+- **Safe close.** Closing the window, Ctrl+C, logoff or shutdown mid-run
+  restarts any service stopped for cleaning and saves the run log. Ctrl+C
+  during a run acts like Q.
 - **Space freed** is now measured and shown, not just item counts.
 - **Optional run log** (`KEEP_LOG`, off by default): writes each run to
   `logs\quiesce_<date>_<time>.log` next to `qc.exe`.

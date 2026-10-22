@@ -142,6 +142,7 @@ func TestLiveFrameRowsFitWidth(t *testing.T) {
 			v.glyphs = glyphs
 			for _, w := range []int{60, 80, 100, 140, 200} {
 				for _, h := range []int{12, 20, 40} {
+					v.invalidate()
 					v.mu.Lock()
 					frame := v.frameLocked(w, h, time.Now())
 					v.mu.Unlock()
@@ -181,6 +182,83 @@ func TestLiveFrameShowsTags(t *testing.T) {
 	}
 }
 
+// TestSummaryStaysInsideLayout: the end-of-run summary is drawn in the log
+// pane, so the checklist, status line and footer stay pinned and nothing is
+// printed below the screen.
+func TestSummaryStaysInsideLayout(t *testing.T) {
+	cfg := DefaultConfig()
+	lines := SummaryLines(cfg, sampleResults())
+	v := newSampleView(t, "done")
+	defer v.Close()
+
+	const w, h = 140, 30
+	v.mu.Lock()
+	v.final = lines
+	frame := v.frameLocked(w, h, time.Now())
+	v.mu.Unlock()
+
+	rows := frameRows(frame)
+	if len(rows) != h {
+		t.Fatalf("summary frame drew %d rows, want %d", len(rows), h)
+	}
+	if got := len(dividerCols(frame)); got != h-3 {
+		t.Errorf("checklist divider on %d rows during summary, want %d", got, h-3)
+	}
+	plain := stripANSI(frame)
+	for _, want := range []string{T("summary.title"), T("live.keys_scroll"), "[" + T("live.done") + "]"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("summary frame has no %q", want)
+		}
+	}
+
+	// Scrolling to the end shows the last summary line, and stops there.
+	v.scrollSummary(1 << 20)
+	v.mu.Lock()
+	v.invalidate()
+	frame = stripANSI(v.frameLocked(w, h, time.Now()))
+	top := v.finalTop
+	v.mu.Unlock()
+	if last := strings.TrimSpace(stripANSI(lines[len(lines)-1])); !strings.Contains(frame, last) {
+		t.Errorf("after scrolling to the end, %q is not on screen", last)
+	}
+	if want := len(lines) - (h - 3); top != want {
+		t.Errorf("scrolled to line %d, want %d", top, want)
+	}
+	v.scrollSummary(-1 << 20)
+	if v.finalTop != 0 {
+		t.Errorf("scrolling up past the start left finalTop at %d", v.finalTop)
+	}
+}
+
+// TestUnchangedRowsAreNotRewritten: once drawn, a frame with nothing new
+// writes only the rows that change (the spinner), not the whole screen.
+func TestUnchangedRowsAreNotRewritten(t *testing.T) {
+	v := newSampleView(t, "done")
+	defer v.Close()
+	now := time.Now()
+	v.mu.Lock()
+	first := v.frameLocked(120, 30, now)
+	second := v.frameLocked(120, 30, now)
+	v.mu.Unlock()
+	if first == "" || second != "" {
+		t.Errorf("identical frame redrew %d bytes, want 0", len(second))
+	}
+}
+
+func TestStoppedServicesAreTracked(t *testing.T) {
+	markServiceStopped("TestSvcA")
+	markServiceStopped("TestSvcB")
+	markServiceRestarted("TestSvcA")
+	svcMu.Lock()
+	_, a := stoppedServices["TestSvcA"]
+	_, b := stoppedServices["TestSvcB"]
+	svcMu.Unlock()
+	markServiceRestarted("TestSvcB")
+	if a || !b {
+		t.Errorf("tracking wrong: A stopped=%v (want false), B stopped=%v (want true)", a, b)
+	}
+}
+
 func TestClipANSI(t *testing.T) {
 	s := RED + "[OK]" + RST + " abcdef"
 	if got := stripANSI(clipANSI(s, 6)); got != "[OK] a" {
@@ -201,7 +279,7 @@ func TestRunTasksIsolatesPanics(t *testing.T) {
 		rep = RunTasks([]Task{
 			{Name: "boom", Title: "boom", Enabled: true, Run: func(*TaskCtx) TaskOutcome { panic("test panic") }},
 			{Name: "next", Title: "next", Enabled: true, Run: func(*TaskCtx) TaskOutcome { ranAfter = true; return TaskOutcome{} }},
-		}, "")
+		}, RunOptions{})
 	})
 	if !ranAfter || !rep.Ran[0] || !rep.Ran[1] {
 		t.Errorf("a panicking task stopped the run: ran=%v after=%v", rep.Ran, ranAfter)
@@ -215,7 +293,7 @@ func TestRunTasksAbortSkipsTheRest(t *testing.T) {
 		rep = RunTasks([]Task{
 			{Name: "a", Title: "a", Enabled: true, Run: func(tc *TaskCtx) TaskOutcome { tc.v.Abort(); return TaskOutcome{} }},
 			{Name: "b", Title: "b", Enabled: true, Run: func(*TaskCtx) TaskOutcome { ranSecond = true; return TaskOutcome{} }},
-		}, "")
+		}, RunOptions{})
 	})
 	if !rep.Aborted || ranSecond || rep.Ran[1] {
 		t.Errorf("abort did not stop the run: aborted=%v ran=%v", rep.Aborted, rep.Ran)
@@ -272,7 +350,7 @@ func TestCleanDirRemovesContentsAndCountsBytes(t *testing.T) {
 		rep = RunTasks([]Task{{Name: "x", Title: "x", Enabled: true, Run: func(tc *TaskCtx) TaskOutcome {
 			d, f = tc.CleanDir(root)
 			return TaskOutcome{}
-		}}}, "")
+		}}}, RunOptions{})
 	})
 	if d != 3 || f != 0 {
 		t.Errorf("deleted=%d failed=%d, want 3 and 0 (two files and one folder)", d, f)
@@ -297,7 +375,7 @@ func TestCleanTreeKeepsFolders(t *testing.T) {
 		RunTasks([]Task{{Name: "x", Title: "x", Enabled: true, Run: func(tc *TaskCtx) TaskOutcome {
 			d, _ = tc.CleanTree(root)
 			return TaskOutcome{}
-		}}}, "")
+		}}}, RunOptions{})
 	})
 	if d != 3 {
 		t.Errorf("deleted %d files, want 3", d)
@@ -313,7 +391,7 @@ func TestMissingFolderIsQuiet(t *testing.T) {
 		RunTasks([]Task{{Name: "x", Title: "x", Enabled: true, Run: func(tc *TaskCtx) TaskOutcome {
 			d, f = tc.CleanDir(filepath.Join(t.TempDir(), "does-not-exist"))
 			return TaskOutcome{}
-		}}}, "")
+		}}}, RunOptions{})
 	})
 	if d != 0 || f != 0 || strings.Contains(out, "[WARN]") {
 		t.Errorf("missing folder: deleted=%d failed=%d output=%q", d, f, out)
@@ -327,7 +405,7 @@ func TestRunLogIsWritten(t *testing.T) {
 		rep = RunTasks([]Task{{Name: "x", Title: "Cleaning x...", Enabled: true, Run: func(tc *TaskCtx) TaskOutcome {
 			tc.v.Deleted("file.tmp", 10)
 			return TaskOutcome{}
-		}}}, dir)
+		}}}, RunOptions{LogDir: dir})
 	})
 	if rep.LogErr != nil || rep.LogPath == "" {
 		t.Fatalf("log not written: path=%q err=%v", rep.LogPath, rep.LogErr)
@@ -354,7 +432,7 @@ func TestRunLogFailureIsReported(t *testing.T) {
 	}
 	var rep RunReport
 	captureStdout(t, func() {
-		rep = RunTasks([]Task{{Name: "x", Title: "x", Enabled: true, Run: func(*TaskCtx) TaskOutcome { return TaskOutcome{} }}}, blocker)
+		rep = RunTasks([]Task{{Name: "x", Title: "x", Enabled: true, Run: func(*TaskCtx) TaskOutcome { return TaskOutcome{} }}}, RunOptions{LogDir: blocker})
 	})
 	if rep.LogErr == nil {
 		t.Error("expected a log error, got none")

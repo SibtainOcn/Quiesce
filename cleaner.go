@@ -47,6 +47,9 @@ type StepResults struct {
 	Aborted bool
 	LogPath string // log file written for this run, if any
 	LogErr  string // why the log file could not be written, if it failed
+
+	// ExitConfirmed: the user already pressed ENTER on the live summary.
+	ExitConfirmed bool
 }
 
 func stopService(name string) {
@@ -204,6 +207,8 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 			results.Ram = RunRamCleaner(cfg, tc)
 			results.RamFreedMB = results.Ram.FreedMB
 			switch r := results.Ram; {
+			case r.NothingToRun:
+				return TaskOutcome{Detail: T("common.off")}
 			case r.PrivFailed:
 				return TaskOutcome{Detail: T("summary.failed"), Warn: true}
 			case r.FreedMB > 0:
@@ -236,22 +241,33 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 		}),
 	}
 
-	logDir := ""
-	if cfg.KeepLog == 1 {
-		logDir = LogDirPath()
-	}
-	rep := RunTasks(tasks, logDir)
-
-	for i, t := range tasks {
-		if t.Enabled && !rep.Ran[i] {
-			results.NotRun[i+1] = true
+	// collect copies the run report into the results the summary reads.
+	collect := func(rep RunReport) {
+		for i, t := range tasks {
+			if t.Enabled && i < len(rep.Ran) && !rep.Ran[i] {
+				results.NotRun[i+1] = true
+			}
+		}
+		results.Aborted = rep.Aborted
+		results.LogPath = rep.LogPath
+		results.LogErr = ""
+		if rep.LogErr != nil {
+			results.LogErr = rep.LogErr.Error()
 		}
 	}
-	results.Aborted = rep.Aborted
-	results.LogPath = rep.LogPath
-	if rep.LogErr != nil {
-		results.LogErr = rep.LogErr.Error()
+
+	opts := RunOptions{
+		Summary: func(rep RunReport) []string {
+			collect(rep)
+			return SummaryLines(cfg, results)
+		},
 	}
+	if cfg.KeepLog == 1 {
+		opts.LogDir = LogDirPath()
+	}
+	rep := RunTasks(tasks, opts)
+	collect(rep)
+	results.ExitConfirmed = rep.ExitConfirmed
 
 	// Deep Cleanup is one-shot: always back to OFF after a run, including a
 	// run that was aborted before reaching it.
