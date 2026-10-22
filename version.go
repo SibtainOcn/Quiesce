@@ -150,9 +150,15 @@ func PrintHelp() {
 	fmt.Println()
 	fmt.Printf("    %s\n", T("help.no_flag"))
 	fmt.Printf("    %s\n", T("help.version"))
+	fmt.Printf("    %s\n", T("help.update"))
 	fmt.Printf("    %s\n", T("help.help"))
 	fmt.Println()
 	printCLICommands()
+}
+
+func isUpdateFlag(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(s))
+	return s == "-u" || s == "--update" || s == "update"
 }
 
 // HandleCLIFlags processes any command-line flag and reports whether the
