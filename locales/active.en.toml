@@ -186,8 +186,9 @@
 "summary.log_fail" = "Could not write the log file: %v"
 
 # --- Live progress screen (shown while a run is in progress) ---
-"live.steps" = "Steps  %d of %d"
-"live.items" = "%d items"
+"live.title_clean" = "Cleaning"
+"live.steps" = "%d of %d steps"
+"live.files" = "%d files"
 "live.skipped" = "skipped"
 "live.paused" = "PAUSED"
 "live.aborting" = "ABORTING"
@@ -196,8 +197,6 @@
 "live.keys_run" = "[P] pause  [Q] abort"
 "live.keys_paused" = "[P] resume  [Q] abort"
 "live.keys_stopping" = "Stopping safely..."
-"live.keys_scroll" = "[Up/Down] scroll  [ENTER] exit"
-"live.keys_exit" = "[ENTER] exit"
 "live.closed_log" = "Window closed - run stopped, services restarted"
 "live.paused_log" = "Paused - press P to resume"
 "live.resumed" = "Resumed"
@@ -205,6 +204,9 @@
 
 # --- Optional settings ---
 "opt.keep_log" = "Save a log file of each run"
+"opt.output_style" = "Output style"
+"opt.verbose" = "VERBOSE"
+"opt.minimal" = "MINIMAL"
 
 # --- Run log file (plain text, written only when the option is ON) ---
 "log.header" = "%s v%s - run started %s"

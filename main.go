@@ -78,11 +78,6 @@ func main() {
 	// it came from.
 	SetConsoleTitle(AppName + " v" + Version)
 
-	// A first launch on a small default window would squeeze the live
-	// screen; grow it where the console allows (see EnsureAdmin for
-	// Windows Terminal).
-	EnsureRoomyWindow()
-
 	// From here on Ctrl+C and closing the window restore any stopped
 	// service and the console before exiting.
 	InstallShutdownHandler()
@@ -137,18 +132,15 @@ func main() {
 			continue
 		}
 
-		// Run cleaning. The summary is shown at the end of the run, inside
-		// the live screen, which waits for ENTER itself.
+		// Proceed to run cleaning
 		results := RunCleaningPipeline(cfg)
+		PrintSummary(cfg, results)
 
-		// Plain output (no live screen): ask here. WaitForEnter flushes
-		// anything typed during the run first, so ENTER presses made while
-		// cleaning was in progress can't close the window before the
-		// summary has been read.
-		if !results.ExitConfirmed {
-			fmt.Print(T("common.press_enter"))
-			WaitForEnter()
-		}
+		// WaitForEnter flushes anything typed during the run first, so ENTER
+		// presses made while cleaning was in progress can't close the window
+		// before the summary has been read.
+		fmt.Print(T("common.press_enter"))
+		WaitForEnter()
 		RestoreConsoleMode()
 		os.Exit(0)
 	}

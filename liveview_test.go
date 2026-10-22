@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// TestMain keeps every test off the real console: with the live screen on, a
-// test run from a terminal would clear it and read the keyboard.
 func TestMain(m *testing.M) {
 	forcePlainView = true
 	os.Exit(m.Run())
@@ -23,225 +21,145 @@ func stepNames() ([]string, []bool) {
 	enabled := make([]bool, 12)
 	for i := range names {
 		names[i] = T(fmt.Sprintf("step.%d.short", i+1))
-		enabled[i] = i != 10 && i != 11 // Recycle Bin and Deep Cleanup off
+		enabled[i] = i != 10 && i != 11
 	}
 	return names, enabled
 }
 
 // newSampleView builds a view part-way through a run, in the given state.
-func newSampleView(t *testing.T, state string) *LiveView {
+func newSampleView(t *testing.T, mode viewMode, state string) *LiveView {
 	t.Helper()
 	names, enabled := stepNames()
 	var v *LiveView
 	captureStdout(t, func() {
-		v = NewLiveView(names, enabled, "")
+		v = NewLiveView(StyleVerbose, T("live.title_clean"), names, enabled, "")
 		for i := 0; i < 2; i++ {
 			v.BeginTask(i, stepHeaderText(i+1), false)
 			v.Deleted("CHROME.EXE-2B1C4F0A.pf", 4096)
-			v.EndTask(i, "142", false)
+			v.EndTask(i, Tf("live.files", 142), false)
 		}
 		v.BeginTask(2, stepHeaderText(3), false)
 		v.SetTotal(180)
 		for j := 0; j < 40; j++ {
 			v.Deleted(strings.Repeat("very_long_file_name_", 6)+".tmp", 1<<20)
 		}
-		v.Log(LogWarn, "a warning line that is much longer than any pane could ever be, to force clipping")
-		v.Log(LogPlain, "日本語のファイル名がとても長い場合でも折り返さないこと.tmp")
 		switch state {
 		case "paused":
 			v.TogglePause()
 		case "aborting":
 			v.Abort()
 		case "done":
-			v.Close()
+			v.Finish()
 		case "aborted":
 			v.Abort()
-			v.Close()
+			v.Finish()
 		}
 	})
 	v.mu.Lock()
+	v.mode = mode
 	v.stats = SystemStats{CpuLoad: 12, UsedGB: 6.21, TotalGB: 15.8, Pct: 39}
 	v.mu.Unlock()
+	t.Cleanup(func() { captureStdout(t, func() { v.Close() }) })
 	return v
+}
+
+func drawn(v *LiveView, w, h int) string {
+	var b strings.Builder
+	v.mu.Lock()
+	v.drawLocked(&b, w, h, time.Now())
+	v.mu.Unlock()
+	return b.String()
 }
 
 func sampleLiveFrame(t *testing.T, w, h int) string {
 	t.Helper()
-	v := newSampleView(t, "running")
-	defer v.Close()
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.frameLocked(w, h, time.Now())
+	return drawn(newSampleView(t, modeVerbose, "running"), w, h) +
+		drawn(newSampleView(t, modeMinimal, "running"), w, h)
 }
 
 var cupRe = regexp.MustCompile(`\x1b\[(\d+);(\d+)H`)
 
-// frameRows splits a frame into rows and returns, for each row, the column
-// just past its last visible character. Text after a cursor jump starts at
-// that jump's column.
-func frameRows(frame string) map[int]int {
-	ends := map[int]int{}
+// drawnRows maps each row the drawing positions to its visible text.
+func drawnRows(frame string) map[int]string {
+	rows := map[int]string{}
 	locs := cupRe.FindAllStringSubmatchIndex(frame, -1)
 	for i, m := range locs {
 		row, _ := strconv.Atoi(frame[m[2]:m[3]])
-		col, _ := strconv.Atoi(frame[m[4]:m[5]])
 		end := len(frame)
 		if i+1 < len(locs) {
 			end = locs[i+1][0]
 		}
-		seg := strings.ReplaceAll(frame[m[1]:end], "\x1b[K", "")
-		ends[row] = max(ends[row], col-1+visibleWidth(seg))
+		rows[row] = stripANSI(frame[m[1]:end])
 	}
-	return ends
+	return rows
 }
 
-// dividerCols returns the column of the panel divider on each row.
-func dividerCols(frame string) map[int]int {
-	cols := map[int]int{}
-	for _, m := range cupRe.FindAllStringSubmatchIndex(frame, -1) {
-		if strings.HasPrefix(stripANSI(frame[m[1]:]), "│") {
-			row, _ := strconv.Atoi(frame[m[2]:m[3]])
-			col, _ := strconv.Atoi(frame[m[4]:m[5]])
-			cols[row] = col
-		}
-	}
-	return cols
-}
-
-// TestDividerIsStraight: the divider must sit in the same column on every
-// row whatever the log lines contain, including wide characters.
-func TestDividerIsStraight(t *testing.T) {
-	v := newSampleView(t, "running")
-	defer v.Close()
-	v.mu.Lock()
-	frame := v.frameLocked(140, 30, time.Now())
-	v.mu.Unlock()
-
-	cols := dividerCols(frame)
-	if len(cols) != 27 {
-		t.Fatalf("divider drawn on %d rows, want 27", len(cols))
-	}
-	want := -1
-	for row, c := range cols {
-		if want == -1 {
-			want = c
-		}
-		if c != want {
-			t.Errorf("row %d: divider at column %d, want %d", row, c, want)
-		}
-	}
-}
-
-// TestLiveFrameRowsFitWidth is the guard against the frame scrolling: a row
-// that reaches the last column wraps on some consoles and pushes the whole
-// screen up one line every redraw.
-func TestLiveFrameRowsFitWidth(t *testing.T) {
-	for _, state := range []string{"running", "paused", "aborting", "done", "aborted"} {
-		for _, glyphs := range []glyphSet{fancyGlyphs, basicGlyphs} {
-			v := newSampleView(t, state)
-			v.glyphs = glyphs
-			for _, w := range []int{60, 80, 100, 140, 200} {
-				for _, h := range []int{12, 20, 40} {
-					v.invalidate()
-					v.mu.Lock()
-					frame := v.frameLocked(w, h, time.Now())
-					v.mu.Unlock()
-
-					rows := frameRows(frame)
-					if len(rows) != h {
-						t.Errorf("%s %dx%d: drew %d rows, want %d", state, w, h, len(rows), h)
-					}
-					for row, end := range rows {
-						if end > w-1 {
-							t.Errorf("%s %dx%d: row %d reaches column %d, max %d",
-								state, w, h, row, end, w-1)
+func TestDrawnRowsFitWidth(t *testing.T) {
+	for _, mode := range []viewMode{modeVerbose, modeMinimal} {
+		for _, state := range []string{"running", "paused", "aborting", "done", "aborted"} {
+			for _, glyphs := range []glyphSet{fancyGlyphs, basicGlyphs} {
+				v := newSampleView(t, mode, state)
+				v.glyphs = glyphs
+				for _, w := range []int{50, 80, 120, 200} {
+					for _, h := range []int{20, 40} {
+						for row, text := range drawnRows(drawn(v, w, h)) {
+							if got := textWidth(text); got > w-1 {
+								t.Errorf("mode %d %s %dx%d: row %d is %d columns, max %d: %q",
+									mode, state, w, h, row, got, w-1, text)
+							}
 						}
 					}
 				}
 			}
-			v.Close()
 		}
 	}
 }
 
-func TestLiveFrameShowsTags(t *testing.T) {
+func TestVerbosePinsThreeBottomRows(t *testing.T) {
+	v := newSampleView(t, modeVerbose, "running")
+	rows := drawnRows(drawn(v, 120, 30))
+	for _, r := range []int{28, 29, 30} {
+		if _, ok := rows[r]; !ok {
+			t.Errorf("row %d not drawn", r)
+		}
+	}
+	if len(rows) != 3 {
+		t.Errorf("verbose drew %d rows, want only the 3 pinned ones", len(rows))
+	}
+	if !strings.Contains(rows[29], "[3/12]") || !strings.Contains(rows[30], T("live.keys_run")) {
+		t.Errorf("status/footer rows wrong: %q / %q", rows[29], rows[30])
+	}
+}
+
+func TestMinimalChecklist(t *testing.T) {
+	v := newSampleView(t, modeMinimal, "running")
+	v.glyphs = fancyGlyphs
+	frame := stripANSI(drawn(v, 120, 30))
+	for _, want := range []string{
+		T("live.title_clean"), Tf("live.steps", 3, 10),
+		"✓", Tf("live.files", 142), "40", T("live.skipped"), T("live.keys_run"),
+	} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("checklist has no %q", want)
+		}
+	}
+	if strings.Contains(frame, "very_long_file_name") {
+		t.Error("minimal style shows file names")
+	}
+}
+
+func TestStatusTags(t *testing.T) {
 	cases := map[string]string{
 		"paused":  "[" + T("live.paused") + "]",
 		"aborted": "[" + T("live.aborted") + "]",
 		"done":    "[" + T("live.done") + "]",
 	}
 	for state, want := range cases {
-		v := newSampleView(t, state)
-		v.mu.Lock()
-		frame := stripANSI(v.frameLocked(120, 30, time.Now()))
-		v.mu.Unlock()
-		v.Close()
-		if !strings.Contains(frame, want) {
-			t.Errorf("%s: frame has no %q", state, want)
+		for _, mode := range []viewMode{modeVerbose, modeMinimal} {
+			if frame := stripANSI(drawn(newSampleView(t, mode, state), 120, 30)); !strings.Contains(frame, want) {
+				t.Errorf("mode %d %s: no %q", mode, state, want)
+			}
 		}
-	}
-}
-
-// TestSummaryStaysInsideLayout: the end-of-run summary is drawn in the log
-// pane, so the checklist, status line and footer stay pinned and nothing is
-// printed below the screen.
-func TestSummaryStaysInsideLayout(t *testing.T) {
-	cfg := DefaultConfig()
-	lines := SummaryLines(cfg, sampleResults())
-	v := newSampleView(t, "done")
-	defer v.Close()
-
-	const w, h = 140, 30
-	v.mu.Lock()
-	v.final = lines
-	frame := v.frameLocked(w, h, time.Now())
-	v.mu.Unlock()
-
-	rows := frameRows(frame)
-	if len(rows) != h {
-		t.Fatalf("summary frame drew %d rows, want %d", len(rows), h)
-	}
-	if got := len(dividerCols(frame)); got != h-3 {
-		t.Errorf("checklist divider on %d rows during summary, want %d", got, h-3)
-	}
-	plain := stripANSI(frame)
-	for _, want := range []string{T("summary.title"), T("live.keys_scroll"), "[" + T("live.done") + "]"} {
-		if !strings.Contains(plain, want) {
-			t.Errorf("summary frame has no %q", want)
-		}
-	}
-
-	// Scrolling to the end shows the last summary line, and stops there.
-	v.scrollSummary(1 << 20)
-	v.mu.Lock()
-	v.invalidate()
-	frame = stripANSI(v.frameLocked(w, h, time.Now()))
-	top := v.finalTop
-	v.mu.Unlock()
-	if last := strings.TrimSpace(stripANSI(lines[len(lines)-1])); !strings.Contains(frame, last) {
-		t.Errorf("after scrolling to the end, %q is not on screen", last)
-	}
-	if want := len(lines) - (h - 3); top != want {
-		t.Errorf("scrolled to line %d, want %d", top, want)
-	}
-	v.scrollSummary(-1 << 20)
-	if v.finalTop != 0 {
-		t.Errorf("scrolling up past the start left finalTop at %d", v.finalTop)
-	}
-}
-
-// TestUnchangedRowsAreNotRewritten: once drawn, a frame with nothing new
-// writes only the rows that change (the spinner), not the whole screen.
-func TestUnchangedRowsAreNotRewritten(t *testing.T) {
-	v := newSampleView(t, "done")
-	defer v.Close()
-	now := time.Now()
-	v.mu.Lock()
-	first := v.frameLocked(120, 30, now)
-	second := v.frameLocked(120, 30, now)
-	v.mu.Unlock()
-	if first == "" || second != "" {
-		t.Errorf("identical frame redrew %d bytes, want 0", len(second))
 	}
 }
 
@@ -304,7 +222,7 @@ func TestPauseBlocksUntilResumed(t *testing.T) {
 	names, enabled := stepNames()
 	var v *LiveView
 	captureStdout(t, func() {
-		v = NewLiveView(names, enabled, "")
+		v = NewLiveView(StyleVerbose, T("live.title_clean"), names, enabled, "")
 		v.TogglePause()
 	})
 	defer v.Close()

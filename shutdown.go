@@ -88,7 +88,8 @@ func emergencyExit() {
 	if v := activeView.Load(); v != nil {
 		v.emergencyClose()
 	}
-	fmt.Print("\x1b[?25h") // the live screen hides the cursor
+	// Undo the live view's console changes: scroll region and hidden cursor.
+	fmt.Print("\x1b[r\x1b[?25h")
 	RestoreConsoleMode()
 	os.Exit(1)
 }

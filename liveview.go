@@ -16,26 +16,33 @@
 
 package main
 
-// LiveView is the full-screen progress display used while a list of tasks
-// runs. It knows nothing about cleaning: it shows whatever task names it is
-// given, so any future feature (browser caches, telemetry scan, ...) gets the
-// same screen by handing RunTasks a different task list.
+// LiveView shows progress while a list of tasks runs, in one of two styles:
 //
-//	+--------------------------------------+---------------------+
-//	| scrolling log - or, once finished,   | task checklist      |
-//	| the summary (scroll with up/down)    | (pinned)            |
-//	+--------------------------------------+---------------------+
-//	| spinner  [3/12] Prefetch  ━━━──  42% | items | MB | time   |  <- status
-//	| CPU 12%  ·  MEMORY 6.21/15.8 GB 39%       [P] pause [Q] abort  <- footer
+// Verbose (default) - the classic output: every step banner and "[OK] file"
+// line scrolls as it always has. The bottom three rows of the window are
+// held back (a console scroll region) for a status line that stays put:
 //
-// The whole layout owns the window from start to exit: nothing is ever
-// printed below it, so nothing can scroll it out of place. One goroutine
-// redraws it about 12 times a second, writing only the rows that changed.
-// Worker goroutines never write to the console directly.
+//	[OK] CHROME.EXE-58E8CA.pf
+//	[OK] ~DF8A528D.TMP
+//	────────────────────────────────────────────────────────────
+//	⠋ [1/12] Windows Temp   ━━━━──────────   7% │ 97 files │ 43.5 MB │ 0.9s
+//	CPU 12%  ·  MEMORY 6.21/15.80 GB 39%           [P] pause  [Q] abort
 //
-// When the console can't do this (no VT support, output redirected, window
-// too small) the view falls back to plain line-by-line printing - the same
-// output Quiesce always had.
+// Minimal - no file names, just a checklist that ticks over:
+//
+//	Cleaning  1 of 10 steps
+//
+//	✓  Windows Temp        140 files    1.3s
+//	⠹  User Temp                  96
+//	·  Prefetch
+//	-  Recycle Bin           skipped
+//
+//	━━━━──────────────  236 files · 96.6 MB · 2.1s
+//	CPU 12%  ·  MEMORY 6.21/15.80 GB 39%           [P] pause  [Q] abort
+//
+// The view knows nothing about cleaning, so other features can reuse it by
+// handing RunTasks a different task list. Where the console can't draw it
+// (no VT support, output redirected, tiny window), output is plain lines.
 
 import (
 	"bufio"
@@ -57,21 +64,33 @@ var (
 	procGetConsoleWindow        = modkernel32Title.NewProc("GetConsoleWindow")
 	procGetCurrentConsoleFontEx = modkernel32Title.NewProc("GetCurrentConsoleFontEx")
 	procGetClassNameW           = moduser32.NewProc("GetClassNameW")
-	procShowWindow              = moduser32.NewProc("ShowWindow")
 )
 
-// forcePlainView keeps the view off the console: no live screen, no
-// keyboard reading. Tests set it so a `go test` run in a terminal doesn't
-// clear the screen or eat keystrokes.
+// forcePlainView keeps the view off the console: no drawing, no keyboard
+// reading. Tests set it so a `go test` run in a terminal is left alone.
 var forcePlainView bool
 
-// activeView is the view currently on screen, if any. The shutdown handler
-// uses it to abort a run on Ctrl+C and to flush the log when the window is
-// closed.
+// activeView is the view currently running, if any. The shutdown handler
+// uses it to abort on Ctrl+C and to tidy up when the window is closed.
 var activeView atomic.Pointer[LiveView]
 
-// LogKind picks how a log line is colored. The text itself is stored plain,
-// so it can be clipped to the pane width and written to the log file as-is.
+// OutputStyle is the user's choice of progress display.
+type OutputStyle int
+
+const (
+	StyleVerbose OutputStyle = iota // scrolling file log + pinned status line
+	StyleMinimal                    // checklist only
+)
+
+type viewMode uint8
+
+const (
+	modePlain viewMode = iota
+	modeVerbose
+	modeMinimal
+)
+
+// LogKind picks how a log line is colored.
 type LogKind uint8
 
 const (
@@ -87,11 +106,6 @@ const (
 	LogSkip                // "<label> - SKIPPED"
 )
 
-type logLine struct {
-	kind LogKind
-	text string
-}
-
 type taskState uint8
 
 const (
@@ -104,59 +118,47 @@ const (
 )
 
 type liveTask struct {
-	name   string
-	state  taskState
-	detail string
+	name      string
+	state     taskState
+	detail    string
+	started   time.Time
+	pauseBase time.Duration // v.pausedFor when the task started
+	took      time.Duration // run time, excluding pauses
 }
 
 const (
-	logRingSize  = 512                   // lines kept for the log pane
 	frameEvery   = 80 * time.Millisecond // redraw rate (~12 fps)
 	statsEvery   = time.Second           // CPU/RAM refresh rate
 	keyPollEvery = 40 * time.Millisecond
 
-	// Below this size the live layout has no room to be useful.
-	minLiveCols = 60
-	minLiveRows = 12
+	pinnedRows = 3 // verbose: divider, status line, CPU/RAM + keys
+	minCols    = 50
 
-	// The log pane must keep at least this many columns before the
-	// checklist panel is allowed to take space from it.
-	minLogCols = 40
-
-	detailW = 10 // width of the value column in the checklist
-	barW    = 20 // width of the progress bar on the status line
-
-	// Key codes from _getch. Arrow and paging keys arrive as a 0 or 0xE0
-	// prefix followed by one of the scan codes below.
-	keyEnter = 13
-	scanUp   = 72
-	scanDown = 80
-	scanPgUp = 73
-	scanPgDn = 81
-	scanHome = 71
-	scanEnd  = 79
+	detailW = 10 // checklist value column, e.g. "140 files"
+	timeW   = 6  // checklist time column, e.g. "1.3s"
+	barW    = 20 // progress bar on the verbose status line
+	minBarW = 30 // progress bar under the minimal checklist
 )
 
 // glyphSet holds the symbols drawn on screen. Windows Terminal and Cascadia
 // fonts have braille and check marks; the legacy console font (Consolas)
 // does not, and would draw empty boxes, so plain symbols are used there.
 type glyphSet struct {
-	spin   []string
-	check  string
-	pend   string
-	off    string
-	warn   string
-	paused string
+	spin  []string
+	check string
+	pend  string
+	off   string
+	warn  string
 }
 
 var (
 	fancyGlyphs = glyphSet{
 		spin:  []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-		check: "✓", pend: "·", off: "-", warn: "!", paused: "‖",
+		check: "✓", pend: "·", off: "-", warn: "!",
 	}
 	basicGlyphs = glyphSet{
 		spin:  []string{"|", "/", "-", `\`},
-		check: "√", pend: ".", off: "-", warn: "!", paused: "=",
+		check: "√", pend: ".", off: "-", warn: "!",
 	}
 )
 
@@ -179,14 +181,12 @@ func pickGlyphs() glyphSet {
 }
 
 type LiveView struct {
-	live        bool
+	mode        viewMode
 	interactive bool
 	glyphs      glyphSet
+	title       string // checklist heading, e.g. "Cleaning"
 
-	mu        sync.Mutex // guards everything below up to the atomics
-	ring      [logRingSize]logLine
-	ringNext  int
-	ringLen   int
+	mu        sync.Mutex // guards everything below, and all console writes
 	tasks     []liveTask
 	cur       int // index of the task last started, -1 before any
 	enabled   int
@@ -198,13 +198,8 @@ type LiveView struct {
 	pausedAt  time.Time
 	pausedFor time.Duration
 	finished  bool
-	final     []string // summary shown in the log pane once finished
-	finalTop  int      // first summary line on screen
-	finalRows int      // rows the log pane had at the last draw
-	finalW    int      // widest summary line
 	lastW     int
 	lastH     int
-	prevRows  []string // rows as last written, to redraw only changes
 	runLog    *runLog
 	logPath   string
 	logErr    error
@@ -219,24 +214,22 @@ type LiveView struct {
 	paused  atomic.Bool
 	aborted atomic.Bool
 
-	exit      chan struct{} // closed when ENTER is pressed on the summary
-	exitOnce  sync.Once
 	stop      chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
 
-// NewLiveView prepares the screen for the given tasks. enabled[i] false
-// shows that task as skipped from the start. logDir, when not empty, is where
-// a plain-text copy of the log is written; a failure to open it is reported
-// in the log and the run carries on without it.
-func NewLiveView(names []string, enabled []bool, logDir string) *LiveView {
+// NewLiveView prepares the display for the given tasks. title heads the
+// minimal checklist. enabled[i] false shows that task as skipped. logDir,
+// when not empty, is where a plain-text copy of the log is written; a
+// failure to open it is reported and the run carries on without it.
+func NewLiveView(style OutputStyle, title string, names []string, enabled []bool, logDir string) *LiveView {
 	v := &LiveView{
+		title:  title,
 		glyphs: basicGlyphs,
 		cur:    -1,
 		start:  time.Now(),
 		stop:   make(chan struct{}),
-		exit:   make(chan struct{}),
 	}
 	v.pcond = sync.NewCond(&v.pmu)
 
@@ -259,27 +252,37 @@ func NewLiveView(names []string, enabled []bool, logDir string) *LiveView {
 			v.runLog = l
 			v.logPath = l.path
 			l.line(Tf("log.header", AppName, Version, v.start.Format("2006-01-02 15:04:05")))
-			l.line("")
 		}
 	}
 
 	if !forcePlainView {
-		w, h, ok := consoleSize()
-		v.live = ok && stdoutSupportsVT() && w >= minLiveCols && h >= minLiveRows
+		v.mode = pickMode(style, len(v.tasks))
 		v.interactive = stdinIsConsole()
 		v.glyphs = pickGlyphs()
 	}
 
 	// Anything typed before the run started (a held ENTER, say) must not be
-	// read as P, Q or the final ENTER.
+	// read as P or Q.
 	if v.interactive {
 		FlushKeyBuffer()
 	}
 
-	if v.live {
+	if v.mode != modePlain {
 		v.stats = GetSystemStats()
-		fmt.Print("\x1b[?25l") // hide the cursor while drawing
-		ClearScreen()
+		w, h, _ := consoleSize()
+		v.mu.Lock()
+		var b strings.Builder
+		b.WriteString("\x1b[?25l") // hide the cursor while drawing
+		b.WriteString("\x1b[H\x1b[2J")
+		if v.mode == modeVerbose {
+			// Logs scroll in rows 1..h-3; the rest is ours.
+			fmt.Fprintf(&b, "\x1b[1;%dr\x1b[1;1H", h-pinnedRows)
+		}
+		v.lastW, v.lastH = w, h
+		v.drawLocked(&b, w, h, time.Now())
+		_, _ = os.Stdout.WriteString(b.String())
+		v.mu.Unlock()
+
 		v.wg.Add(2)
 		go v.renderLoop()
 		go v.statsLoop()
@@ -296,6 +299,25 @@ func NewLiveView(names []string, enabled []bool, logDir string) *LiveView {
 	return v
 }
 
+// pickMode falls back to plain output when the console can't hold the
+// chosen style.
+func pickMode(style OutputStyle, tasks int) viewMode {
+	w, h, ok := consoleSize()
+	if !ok || !stdoutSupportsVT() || w < minCols {
+		return modePlain
+	}
+	if style == StyleMinimal && h > minimalRows(tasks) {
+		return modeMinimal
+	}
+	if h >= pinnedRows+5 {
+		return modeVerbose
+	}
+	return modePlain
+}
+
+// minimalRows is the height of the minimal checklist block.
+func minimalRows(tasks int) int { return tasks + 6 }
+
 func (v *LiveView) labelFor(i int) string {
 	return fmt.Sprintf("[%d/%d] %s", i+1, len(v.tasks), v.tasks[i].name)
 }
@@ -309,6 +331,8 @@ func (v *LiveView) BeginTask(i int, title string, alert bool) {
 	v.mu.Lock()
 	v.cur = i
 	v.tasks[i].state = taskRunning
+	v.tasks[i].started = time.Now()
+	v.tasks[i].pauseBase = v.pausedFor
 	v.mu.Unlock()
 
 	v.Log(LogPlain, "")
@@ -321,11 +345,18 @@ func (v *LiveView) BeginTask(i int, title string, alert bool) {
 
 // EndTask records how task i finished and the value shown beside it.
 func (v *LiveView) EndTask(i int, detail string, warn bool) {
+	now := time.Now()
 	v.mu.Lock()
-	v.tasks[i].detail = detail
-	v.tasks[i].state = taskDone
+	t := &v.tasks[i]
+	paused := v.pausedFor - t.pauseBase
+	if v.paused.Load() {
+		paused += now.Sub(v.pausedAt)
+	}
+	t.took = max(0, now.Sub(t.started)-paused)
+	t.detail = detail
+	t.state = taskDone
 	if warn {
-		v.tasks[i].state = taskWarn
+		t.state = taskWarn
 	}
 	v.mu.Unlock()
 	v.Log(LogPlain, T("common.done"))
@@ -369,26 +400,25 @@ func (v *LiveView) AddBytes(n int64) {
 	}
 }
 
-// Log adds a line to the log pane (and the log file). In plain mode it is
-// printed straight away instead.
+// Log writes a line to the log file and, except in minimal style, to the
+// screen. Verbose prints it like the classic output; the console's scroll
+// region keeps it above the pinned status rows.
 func (v *LiveView) Log(kind LogKind, text string) {
-	l := logLine{kind, text}
+	line := renderLogLine(kind, text)
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	v.ring[v.ringNext] = l
-	v.ringNext = (v.ringNext + 1) % logRingSize
-	if v.ringLen < logRingSize {
-		v.ringLen++
+	v.runLog.line(stripANSI(line))
+	if v.mode == modeMinimal || v.finished && v.mode != modePlain {
+		return
 	}
-	v.runLog.line(plainLogLine(l))
-
-	if !v.live {
-		fmt.Println(renderLogLine(l))
-		if kind == LogHeader || kind == LogHeaderAlert {
-			fmt.Println("+---------------------------------------+")
-		}
+	var b strings.Builder
+	b.WriteString(line)
+	b.WriteString("\n")
+	if kind == LogHeader || kind == LogHeaderAlert {
+		b.WriteString("+---------------------------------------+\n")
 	}
+	_, _ = os.Stdout.WriteString(b.String())
 }
 
 // Checkpoint is called between items. It blocks while the run is paused and
@@ -471,8 +501,7 @@ func (v *LiveView) Totals() (items, bytes int64, elapsed time.Duration) {
 	return v.items.Load(), v.bytes.Load(), v.elapsedLocked(time.Now())
 }
 
-// Finish marks the run as over: the clock stops, the status line shows
-// [DONE] or [ABORTED], and P/Q no longer do anything.
+// Finish stops the clock and makes the status show [DONE] or [ABORTED].
 func (v *LiveView) Finish() {
 	now := time.Now()
 	v.mu.Lock()
@@ -493,68 +522,40 @@ func (v *LiveView) Finish() {
 	v.pmu.Unlock()
 }
 
-// ShowSummary puts the end-of-run summary on screen and writes it to the log
-// file. On the live screen it replaces the log pane - the checklist and
-// status lines stay where they are - and waits for ENTER, returning true.
-// In plain mode it prints the lines and returns false, leaving the "press
-// ENTER" prompt to the caller.
-func (v *LiveView) ShowSummary(lines []string) (waitedForExit bool) {
-	v.Finish()
-	v.mu.Lock()
-	for _, l := range lines {
-		v.runLog.line(stripANSI(l))
-	}
-	if !v.live {
-		v.mu.Unlock()
-		for _, l := range lines {
-			fmt.Println(l)
-		}
-		return false
-	}
-	v.final = lines
-	v.finalTop = 0
-	v.finalW = 0
-	for _, l := range lines {
-		v.finalW = max(v.finalW, visibleWidth(l))
-	}
-	v.mu.Unlock()
-
-	if !v.interactive {
-		return false
-	}
-	<-v.exit
-	return true
-}
-
-// scrollSummary moves the summary by delta lines, clamped to its length.
-func (v *LiveView) scrollSummary(delta int) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	maxTop := max(0, len(v.final)-v.finalRows)
-	v.finalTop = min(max(0, v.finalTop+delta), maxTop)
-}
-
-// Close stops the background goroutines, draws the final frame, restores
-// the cursor and closes the log file. It is safe to call more than once.
+// Close stops the background goroutines and hands the console back in its
+// normal state, with the cursor where the next output (the summary) should
+// go. The log file is closed. Safe to call more than once.
 func (v *LiveView) Close() (logPath string, logErr error) {
 	v.closeOnce.Do(func() {
 		v.Finish()
 		close(v.stop)
 		v.wg.Wait()
 
-		if v.live {
-			v.render()
-			// Leave the cursor on the bottom row, cleared, so a shell
-			// prompt that follows (when run from an existing terminal)
-			// lands there instead of scrolling the screen.
-			_, h, ok := consoleSize()
-			if !ok {
-				h = v.lastH
-			}
-			fmt.Printf("\x1b[%d;1H\x1b[2K\x1b[?25h", h)
-		}
-
 		v.mu.Lock()
+		var b strings.Builder
+		w, h, ok := consoleSize()
+		if !ok {
+			w, h = v.lastW, v.lastH
+		}
+		switch v.mode {
+		case modeVerbose:
+			// Clear the pinned rows, give the whole window back to normal
+			// scrolling, then print the final status where the log ended -
+			// the summary follows it like any other output.
+			b.WriteString("\x1b7")
+			for r := h - pinnedRows + 1; r <= h; r++ {
+				fmt.Fprintf(&b, "\x1b[%d;1H\x1b[2K", r)
+			}
+			b.WriteString("\x1b[r\x1b8")
+			b.WriteString("\n" + clipANSI(v.statusLocked(w-1, time.Now()), w-1) + "\n")
+		case modeMinimal:
+			v.drawLocked(&b, w, h, time.Now())
+			fmt.Fprintf(&b, "\x1b[%d;1H", minimalRows(len(v.tasks))+1)
+		}
+		if v.mode != modePlain {
+			b.WriteString("\x1b[?25h")
+			_, _ = os.Stdout.WriteString(b.String())
+		}
 		v.closeLogLocked()
 		v.mu.Unlock()
 		activeView.CompareAndSwap(v, nil)
@@ -562,15 +563,12 @@ func (v *LiveView) Close() (logPath string, logErr error) {
 	return v.logPath, v.logErr
 }
 
-// emergencyClose is used when the process is about to be killed (window
+// emergencyClose runs when the process is about to be killed (window
 // closed, logoff): it saves the log without waiting for anything.
 func (v *LiveView) emergencyClose() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.runLog != nil {
-		v.runLog.line("")
-		v.runLog.line(T("live.closed_log"))
-	}
+	v.runLog.line(T("live.closed_log"))
 	v.closeLogLocked()
 }
 
@@ -627,8 +625,8 @@ func (v *LiveView) statsLoop() {
 	}
 }
 
-// keyLoop polls the keyboard without blocking, so it can stop as soon as
-// the view closes and never swallows a key meant for the next prompt.
+// keyLoop polls the keyboard without blocking, so it stops as soon as the
+// run ends and never swallows a key meant for the next prompt.
 func (v *LiveView) keyLoop() {
 	defer v.wg.Done()
 	defer func() { _ = recover() }()
@@ -648,174 +646,130 @@ func (v *LiveView) keyLoop() {
 			if r, _, _ := procKbhit.Call(); r == 0 {
 				break
 			}
-			v.handleKey(ReadSingleKey())
+			ch := ReadSingleKey()
+			// Arrow and function keys arrive as two codes: a 0 or 0xE0
+			// prefix, then a scan code. Down-arrow's scan code is 'P', so
+			// the second code must be consumed, not read as P.
+			if ch == 0 || ch == 0xE0 {
+				ReadSingleKey()
+				continue
+			}
+			switch ch {
+			case 'p', 'P':
+				v.TogglePause()
+			case 'q', 'Q':
+				v.Abort()
+			}
 		}
 	}
-}
-
-func (v *LiveView) handleKey(ch rune) {
-	// Arrow and paging keys arrive as two codes. The second is a scan code,
-	// and down-arrow's happens to be 'P', so it must never be read as P.
-	if ch == 0 || ch == 0xE0 {
-		page := max(1, v.pageRows()-1)
-		switch ReadSingleKey() {
-		case scanUp:
-			v.scrollSummary(-1)
-		case scanDown:
-			v.scrollSummary(1)
-		case scanPgUp:
-			v.scrollSummary(-page)
-		case scanPgDn:
-			v.scrollSummary(page)
-		case scanHome:
-			v.scrollSummary(-1 << 20)
-		case scanEnd:
-			v.scrollSummary(1 << 20)
-		}
-		return
-	}
-
-	if v.isFinished() {
-		switch ch {
-		case keyEnter:
-			v.exitOnce.Do(func() { close(v.exit) })
-		case 'w', 'W':
-			v.scrollSummary(-1)
-		case 's', 'S':
-			v.scrollSummary(1)
-		}
-		return
-	}
-	switch ch {
-	case 'p', 'P':
-		v.TogglePause()
-	case 'q', 'Q':
-		v.Abort()
-	}
-}
-
-func (v *LiveView) pageRows() int {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.finalRows
 }
 
 // --- Drawing ---------------------------------------------------------------
 
 func (v *LiveView) render() {
 	w, h, ok := consoleSize()
-	if !ok || w < minLiveCols || h < minLiveRows {
+	if !ok || w < minCols {
 		return
 	}
 	v.mu.Lock()
-	frame := v.frameLocked(w, h, time.Now())
-	v.mu.Unlock()
-	if frame != "" {
-		_, _ = os.Stdout.WriteString(frame)
+	defer v.mu.Unlock()
+	if v.finished {
+		return // Close draws the final state
 	}
-}
-
-// frameLocked returns what must be written to bring the screen up to date:
-// every row after a resize, otherwise only the rows that changed. Every row
-// is positioned explicitly and kept to w-1 visible columns - writing into
-// the last column makes some consoles wrap, which would scroll the screen.
-func (v *LiveView) frameLocked(w, h int, now time.Time) string {
-	rows := v.rowsLocked(w, h, now)
-
 	var b strings.Builder
-	full := w != v.lastW || h != v.lastH || len(v.prevRows) != len(rows)
-	if full {
-		// Resized: wipe the screen and the scrollback, where the console
-		// may have reflowed old frames.
-		b.WriteString("\x1b[2J\x1b[3J")
-		v.lastW, v.lastH = w, h
-		v.prevRows = make([]string, len(rows))
-	}
-	for i, r := range rows {
-		if full || r != v.prevRows[i] {
-			b.WriteString(r)
-			v.prevRows[i] = r
+	if w != v.lastW || h != v.lastH {
+		switch v.mode {
+		case modeVerbose:
+			// Re-fit the scroll region to the new height and carry on
+			// logging at its bottom.
+			fmt.Fprintf(&b, "\x1b[1;%dr\x1b[%d;1H", h-pinnedRows, h-pinnedRows)
+		case modeMinimal:
+			b.WriteString("\x1b[H\x1b[2J")
 		}
+		v.lastW, v.lastH = w, h
 	}
-	return b.String()
+	v.drawLocked(&b, w, h, time.Now())
+	_, _ = os.Stdout.WriteString(b.String())
 }
 
-// invalidate forces the next frame to redraw every row.
-func (v *LiveView) invalidate() { v.lastW, v.lastH = 0, 0 }
-
-func (v *LiveView) rowsLocked(w, h int, now time.Time) []string {
+// drawLocked appends the pinned rows (verbose) or the checklist block
+// (minimal). Rows are positioned explicitly and kept to w-1 columns:
+// writing into the last column makes some consoles wrap and scroll.
+func (v *LiveView) drawLocked(b *strings.Builder, w, h int, now time.Time) {
 	cols := w - 1
-	logRows := h - 3
-	panelW := v.nameW + 7 + detailW
-	minLeft := minLogCols
-	if v.final != nil {
-		// The summary repeats every step's result, so on a window too
-		// narrow for both, the summary gets the full width.
-		minLeft = max(minLeft, v.finalW)
-	}
-	showPanel := logRows >= len(v.tasks)+2 && cols-panelW-1 >= minLeft
-	logW := cols
-	if showPanel {
-		logW = cols - panelW - 1
-	}
-	v.finalRows = logRows
-
-	left := v.paneLinesLocked(logRows)
-	rows := make([]string, 0, h)
-	for r := 0; r < logRows; r++ {
-		row := fmt.Sprintf("\x1b[%d;1H%s\x1b[K", r+1, clipANSI(left[r], logW))
-		if showPanel {
-			// The divider is placed by jumping to its column, not by
-			// padding after the text. If a file name holds a character the
-			// terminal draws wider or narrower than counted, the log text
-			// may end up off by a column, but the divider and the panel
-			// stay in a straight line.
-			row += fmt.Sprintf("\x1b[%d;%dH%s│%s%s", r+1, logW+1, DIM, RST,
-				clipANSI(v.panelLineLocked(r, now), panelW))
+	switch v.mode {
+	case modeVerbose:
+		top := h - pinnedRows + 1
+		b.WriteString("\x1b7") // save the log's cursor position
+		fmt.Fprintf(b, "\x1b[%d;1H%s%s%s\x1b[K", top, DIM, strings.Repeat("─", cols), RST)
+		fmt.Fprintf(b, "\x1b[%d;1H%s\x1b[K", top+1, clipANSI(v.statusLocked(cols, now), cols))
+		fmt.Fprintf(b, "\x1b[%d;1H%s\x1b[K", top+2, clipANSI(v.footerLocked(cols), cols))
+		b.WriteString("\x1b8")
+	case modeMinimal:
+		for i, row := range v.checklistLocked(cols, now) {
+			fmt.Fprintf(b, "\x1b[%d;1H%s\x1b[K", i+1, clipANSI(row, cols))
 		}
-		rows = append(rows, row)
+	}
+}
+
+// checklistLocked builds the minimal style's rows.
+func (v *LiveView) checklistLocked(cols int, now time.Time) []string {
+	rows := make([]string, 0, minimalRows(len(v.tasks)))
+	head := "  "
+	if v.title != "" {
+		head += WHITE + v.title + RST + "  "
+	}
+	rows = append(rows, "", head+DIM+Tf("live.steps", v.startedEnabledLocked(), v.enabled)+RST, "")
+	for i := range v.tasks {
+		rows = append(rows, v.taskRowLocked(i, now))
 	}
 
-	sep := strings.Repeat("─", logW)
-	if showPanel {
-		sep += "┴" + strings.Repeat("─", panelW)
+	p := v.progressLocked()
+	filled := int(p*minBarW + 0.5)
+	bar := RED + strings.Repeat("━", filled) + DIM + strings.Repeat("─", minBarW-filled) + RST
+	dot := DIM + " · " + RST
+	line := "  " + bar + "  " + Tf("live.files", v.items.Load()) + dot +
+		FormatBytesHuman(uint64(v.bytes.Load())) + dot + formatElapsed(v.elapsedLocked(now))
+	if tag := v.tagLocked(); tag != "" {
+		line += "  " + tag
 	}
-	rows = append(rows,
-		fmt.Sprintf("\x1b[%d;1H%s%s%s\x1b[K", logRows+1, DIM, sep, RST),
-		fmt.Sprintf("\x1b[%d;1H%s\x1b[K", logRows+2, clipANSI(v.statusLocked(cols, now), cols)),
-		fmt.Sprintf("\x1b[%d;1H%s\x1b[K", logRows+3, clipANSI(v.footerLocked(cols), cols)),
-	)
+	rows = append(rows, "", line, "  "+v.footerLocked(cols-2))
 	return rows
 }
 
-// paneLinesLocked returns exactly n colored lines for the left pane: the
-// summary once the run is finished, otherwise the tail of the log.
-func (v *LiveView) paneLinesLocked(n int) []string {
-	out := make([]string, n)
-	if v.final != nil {
-		v.finalTop = min(v.finalTop, max(0, len(v.final)-n))
-		for i := 0; i < n && v.finalTop+i < len(v.final); i++ {
-			out[i] = v.final[v.finalTop+i]
+// taskRowLocked draws one checklist row:
+//
+//	✓  Windows Temp        140 files    1.3s
+//	⠹  User Temp                  96
+//	·  Prefetch
+//	-  Recycle Bin           skipped
+func (v *LiveView) taskRowLocked(i int, now time.Time) string {
+	t := v.tasks[i]
+	g := v.glyphs
+	name := padRight(t.name, v.nameW)
+	took := "  " + DIM + padLeft(formatTaskTime(t.took), timeW) + RST
+	switch t.state {
+	case taskOff:
+		return DIM + "  " + g.off + "  " + name + " " + padLeft(T("live.skipped"), detailW) + RST
+	case taskNotRun:
+		return DIM + "  " + g.off + "  " + name + " " + padLeft(T("common.not_run"), detailW) + RST
+	case taskRunning:
+		icon := RED + v.spinner(now) + RST
+		if v.paused.Load() {
+			icon = YELLOW + g.warn + RST
 		}
-		return out
+		count := ""
+		if v.stepTotal.Load() > 0 {
+			count = fmt.Sprint(v.stepDone.Load())
+		}
+		return "  " + icon + "  " + WHITE + name + " " + padLeft(count, detailW) + RST
+	case taskDone:
+		return "  " + GREEN + g.check + RST + "  " + WHITE + name + RST + " " + RED + padLeft(t.detail, detailW) + RST + took
+	case taskWarn:
+		return "  " + YELLOW + g.warn + RST + "  " + name + " " + YELLOW + padLeft(t.detail, detailW) + RST + took
+	default:
+		return DIM + "  " + g.pend + "  " + t.name + RST
 	}
-	lines := v.tailLocked(n)
-	offset := n - len(lines)
-	for i, l := range lines {
-		out[offset+i] = renderLogLine(l)
-	}
-	return out
-}
-
-// tailLocked returns the last n log lines, oldest first.
-func (v *LiveView) tailLocked(n int) []logLine {
-	n = min(n, v.ringLen)
-	out := make([]logLine, n)
-	start := (v.ringNext - n + logRingSize) % logRingSize
-	for i := 0; i < n; i++ {
-		out[i] = v.ring[(start+i)%logRingSize]
-	}
-	return out
 }
 
 func (v *LiveView) spinner(now time.Time) string {
@@ -831,41 +785,6 @@ func (v *LiveView) startedEnabledLocked() int {
 		}
 	}
 	return n
-}
-
-func (v *LiveView) panelLineLocked(r int, now time.Time) string {
-	switch {
-	case r == 0:
-		return "  " + WHITE + Tf("live.steps", v.startedEnabledLocked(), v.enabled) + RST
-	case r == 1 || r-2 >= len(v.tasks):
-		return ""
-	}
-
-	t := v.tasks[r-2]
-	g := v.glyphs
-	name := padRight(t.name, v.nameW)
-	switch t.state {
-	case taskOff:
-		return DIM + "  " + g.off + "  " + name + " " + padLeft(T("live.skipped"), detailW) + RST
-	case taskNotRun:
-		return DIM + "  " + g.off + "  " + name + " " + padLeft(T("common.not_run"), detailW) + RST
-	case taskRunning:
-		icon := RED + v.spinner(now) + RST
-		if v.paused.Load() {
-			icon = YELLOW + g.paused + RST
-		}
-		prog := ""
-		if total := v.stepTotal.Load(); total > 0 {
-			prog = fmt.Sprintf("%d/%d", v.stepDone.Load(), total)
-		}
-		return "  " + icon + "  " + WHITE + name + RST + " " + padLeft(prog, detailW)
-	case taskDone:
-		return "  " + GREEN + g.check + RST + "  " + name + " " + RED + padLeft(t.detail, detailW) + RST
-	case taskWarn:
-		return "  " + YELLOW + g.warn + RST + "  " + name + " " + YELLOW + padLeft(t.detail, detailW) + RST
-	default:
-		return DIM + "  " + g.pend + "  " + t.name + RST
-	}
 }
 
 // progressLocked is the share of enabled tasks finished, counting the
@@ -900,31 +819,37 @@ func (v *LiveView) elapsedLocked(now time.Time) time.Duration {
 	return max(0, d)
 }
 
-func (v *LiveView) statusLocked(cols int, now time.Time) string {
-	curName, curLabel := "", ""
-	if v.cur >= 0 {
-		curName = v.tasks[v.cur].name
-		curLabel = v.labelFor(v.cur)
-	}
-
-	var head string
+// tagLocked is the bracketed state tag, or "" while running normally.
+func (v *LiveView) tagLocked() string {
 	aborted := v.aborted.Load()
 	switch {
 	case v.finished && aborted:
-		head = RED + "[" + T("live.aborted") + "] " + curName + RST
+		return RED + "[" + T("live.aborted") + "]" + RST
 	case v.finished:
-		head = GREEN + "[" + T("live.done") + "]" + RST
+		return GREEN + "[" + T("live.done") + "]" + RST
 	case aborted:
-		head = RED + "[" + T("live.aborting") + "] " + curName + RST
+		return RED + "[" + T("live.aborting") + "]" + RST
 	case v.paused.Load():
-		head = YELLOW + "[" + T("live.paused") + "] " + curName + RST
-	case v.cur < 0:
-		head = RED + v.spinner(now) + RST
-	default:
-		head = RED + v.spinner(now) + RST + " " + WHITE + curLabel + RST
+		return YELLOW + "[" + T("live.paused") + "]" + RST
+	}
+	return ""
+}
+
+// statusLocked is the verbose status line.
+func (v *LiveView) statusLocked(cols int, now time.Time) string {
+	label := ""
+	if v.cur >= 0 {
+		label = v.labelFor(v.cur)
+	}
+	head := v.tagLocked()
+	switch {
+	case head == "":
+		head = RED + v.spinner(now) + RST + " " + WHITE + label + RST
+	case !v.finished || v.aborted.Load():
+		head += " " + WHITE + label + RST
 	}
 	// Fixed width, so the bar doesn't jump as task names change length.
-	headW := v.nameW + 10
+	headW := v.nameW + 22
 	head += strings.Repeat(" ", max(1, headW-visibleWidth(head)))
 
 	p := v.progressLocked()
@@ -933,7 +858,7 @@ func (v *LiveView) statusLocked(cols int, now time.Time) string {
 	pct := fmt.Sprintf(" %3d%%", int(p*100+0.5))
 
 	sepr := " " + DIM + "│" + RST + " "
-	stats := sepr + Tf("live.items", v.items.Load()) +
+	stats := sepr + Tf("live.files", v.items.Load()) +
 		sepr + FormatBytesHuman(uint64(v.bytes.Load())) +
 		sepr + formatElapsed(v.elapsedLocked(now))
 
@@ -951,10 +876,6 @@ func (v *LiveView) footerLocked(cols int) string {
 
 	keys := ""
 	switch {
-	case v.final != nil && len(v.final) > v.finalRows:
-		keys = T("live.keys_scroll")
-	case v.final != nil:
-		keys = T("live.keys_exit")
 	case v.finished:
 	case v.aborted.Load():
 		keys = T("live.keys_stopping")
@@ -971,34 +892,29 @@ func (v *LiveView) footerLocked(cols int) string {
 }
 
 // renderLogLine colors a log line for the screen.
-func renderLogLine(l logLine) string {
-	switch l.kind {
+func renderLogLine(kind LogKind, text string) string {
+	switch kind {
 	case LogHeader:
-		return WHITE + l.text + RST
+		return WHITE + text + RST
 	case LogHeaderAlert:
-		return RED + l.text + RST
+		return RED + text + RST
 	case LogOK:
-		return RED + "[OK]" + RST + " " + l.text
+		return RED + "[OK]" + RST + " " + text
 	case LogWarn:
-		return CYAN + "[WARN]" + RST + " " + l.text
+		return CYAN + "[WARN]" + RST + " " + text
 	case LogError:
-		return RED + "[ERROR]" + RST + " " + l.text
+		return RED + "[ERROR]" + RST + " " + text
 	case LogInfo:
-		return CYAN + l.text + RST
+		return CYAN + text + RST
 	case LogGood:
-		return RED + l.text + RST
+		return RED + text + RST
 	case LogBad:
-		return YELLOW + l.text + RST
+		return YELLOW + text + RST
 	case LogSkip:
-		return l.text + " - " + CYAN + T("common.skipped") + RST
+		return text + " - " + CYAN + T("common.skipped") + RST
 	default:
-		return l.text
+		return text
 	}
-}
-
-// plainLogLine is the uncolored form used in the log file.
-func plainLogLine(l logLine) string {
-	return stripANSI(renderLogLine(l))
 }
 
 // formatElapsed shows tenths of a second for short runs, where "00:00"
@@ -1012,6 +928,16 @@ func formatElapsed(d time.Duration) string {
 		return fmt.Sprintf("%d:%02d:%02d", s/3600, s/60%60, s%60)
 	}
 	return fmt.Sprintf("%02d:%02d", s/60, s%60)
+}
+
+// formatTaskTime is the checklist's per-task time: "1.4s", or "2m05s" for
+// a minute and over.
+func formatTaskTime(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	s := int(d.Seconds())
+	return fmt.Sprintf("%dm%02ds", s/60, s%60)
 }
 
 // --- Log file ----------------------------------------------------------------
@@ -1086,20 +1012,15 @@ func stdinIsConsole() bool {
 	return windows.GetConsoleMode(hnd, &mode) == nil
 }
 
-func consoleHWND() uintptr {
-	if procGetConsoleWindow.Find() != nil {
-		return 0
-	}
-	h, _, _ := procGetConsoleWindow.Call()
-	return h
-}
-
 // consoleWindowClass tells the hosts apart: "ConsoleWindowClass" is the
 // classic console (conhost); "PseudoConsoleWindow" means a modern terminal
 // such as Windows Terminal draws the window.
 func consoleWindowClass() string {
-	hwnd := consoleHWND()
-	if hwnd == 0 || procGetClassNameW.Find() != nil {
+	if procGetConsoleWindow.Find() != nil || procGetClassNameW.Find() != nil {
+		return ""
+	}
+	hwnd, _, _ := procGetConsoleWindow.Call()
+	if hwnd == 0 {
 		return ""
 	}
 	buf := make([]uint16, 64)
@@ -1132,34 +1053,11 @@ func consoleFontFace() string {
 	return windows.UTF16ToString(f.face[:])
 }
 
-// Smallest window that shows the live screen comfortably: room for the log
-// and the checklist side by side, and every checklist row.
-const (
-	comfyCols = 120
-	comfyRows = 35
-)
-
-// EnsureRoomyWindow maximizes a classic console window that is smaller than
-// the live screen needs. Windows Terminal ignores this request; there the
-// window is opened maximized when Quiesce relaunches as administrator (see
-// EnsureAdmin).
-func EnsureRoomyWindow() {
-	w, h, ok := consoleSize()
-	if !ok || (w >= comfyCols && h >= comfyRows) {
-		return
-	}
-	if consoleWindowClass() != "ConsoleWindowClass" || procShowWindow.Find() != nil {
-		return
-	}
-	const swMaximize = 3
-	procShowWindow.Call(consoleHWND(), swMaximize)
-}
-
 // --- Text width helpers --------------------------------------------------------
 //
 // Widths are counted in terminal columns: escape sequences take none, and
-// CJK/emoji take two. Getting this wrong makes a row wrap, which scrolls the
-// whole frame.
+// CJK/emoji take two. Getting this wrong makes a pinned row wrap, which
+// scrolls the screen.
 
 func runeWidth(r rune) int {
 	switch {

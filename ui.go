@@ -411,17 +411,37 @@ func mainLabelWidth() int {
 		plain, _ := stepLabel(i)
 		w = max(w, len([]rune(plain)))
 	}
-	return max(w, len([]rune(keepLogLabel())))
+	for _, i := range optionIndices {
+		w = max(w, len([]rune(optionLabel(i))))
+	}
+	return w
 }
 
-// keepLogIndex is the settings-screen index of the "save a log file"
-// option. It is not a cleaning step, so it sits outside 1-12 and 101-104.
-const keepLogIndex = 201
+// Settings-screen indices of the options that are not cleaning steps. They
+// sit outside 1-12 and 101-104 so step loops never pick them up.
+const (
+	keepLogIndex     = 201 // save a log file of each run
+	outputStyleIndex = 202 // verbose or minimal progress display
+)
 
-// keepLogLabel is indented past the "[n] " column so its name lines up with
-// the step names above it.
-func keepLogLabel() string {
-	return fmt.Sprintf("%-5s%s", "", T("opt.keep_log"))
+var optionIndices = []int{outputStyleIndex, keepLogIndex}
+
+// optionLabel is indented past the "[n] " column so the option names line
+// up with the step names above them.
+func optionLabel(index int) string {
+	name := T("opt.keep_log")
+	if index == outputStyleIndex {
+		name = T("opt.output_style")
+	}
+	return fmt.Sprintf("%-5s%s", "", name)
+}
+
+// RenderStyle formats the output style setting as [VERBOSE] or [MINIMAL].
+func RenderStyle(style int) string {
+	if style == int(StyleMinimal) {
+		return fmt.Sprintf("%s[%s]%s", CYAN, T("opt.minimal"), RST)
+	}
+	return fmt.Sprintf("%s[%s]%s", RED, T("opt.verbose"), RST)
 }
 
 func subLabelWidth() int {
@@ -435,8 +455,8 @@ func subLabelWidth() int {
 // GetCfgDispName returns the display label for a config index, already
 // padded so the ON/OFF column that follows lines up with its group.
 func GetCfgDispName(index int) string {
-	if index == keepLogIndex {
-		return padRight(keepLogLabel(), mainLabelWidth())
+	if index == keepLogIndex || index == outputStyleIndex {
+		return padRight(optionLabel(index), mainLabelWidth())
 	}
 	if index >= 101 {
 		return padRight(subLabel(index), subLabelWidth())
@@ -559,7 +579,8 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 	// sub-options indented under [10], then step 11 and Deep Cleanup (12).
 	entries := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	entries = append(entries, ramSubOptions...)
-	entries = append(entries, 11, 12, keepLogIndex)
+	entries = append(entries, 11, 12)
+	entries = append(entries, optionIndices...)
 
 	// sel is a position in entries, not a config index.
 	sel := 0
@@ -595,9 +616,9 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 		}
 
 		for pos, idx := range entries {
-			// The log option is not a cleaning step; a blank line sets it
-			// apart from them.
-			if idx == keepLogIndex {
+			// The options are not cleaning steps; a blank line sets them
+			// apart.
+			if idx == optionIndices[0] {
 				fmt.Println()
 				row++
 			}
@@ -615,7 +636,11 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			if idx == 12 {
 				on = cfg.DeepCleanup == 1
 			}
-			fmt.Printf("   %s : %s%s\n", GetCfgDispName(idx), RenderToggle(on), a)
+			value := RenderToggle(on)
+			if idx == outputStyleIndex {
+				value = RenderStyle(cfg.OutputStyle)
+			}
+			fmt.Printf("   %s : %s%s\n", GetCfgDispName(idx), value, a)
 		}
 
 		pln()
@@ -647,17 +672,28 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			if sel > len(entries)-1 {
 				sel = 0
 			}
-		case "a":
+		case "a", "d":
+			// Output style has two values, not ON/OFF: A and D both
+			// switch it between verbose and minimal.
+			if entries[sel] == outputStyleIndex {
+				cfg.OutputStyle = 1 - cfg.OutputStyle
+				if cfg.OutputStyle != int(StyleMinimal) {
+					cfg.OutputStyle = int(StyleVerbose)
+				}
+				break
+			}
+			if chStr == "d" {
+				if entries[sel] == 12 {
+					cfg.DeepCleanup = 1
+				} else {
+					cfg.SetVal(entries[sel], 1)
+				}
+				break
+			}
 			if entries[sel] == 12 {
 				cfg.DeepCleanup = 0
 			} else {
 				cfg.SetVal(entries[sel], 0)
-			}
-		case "d":
-			if entries[sel] == 12 {
-				cfg.DeepCleanup = 1
-			} else {
-				cfg.SetVal(entries[sel], 1)
 			}
 		case "l":
 			// The picker redraws this screen in the new language on return,
@@ -768,13 +804,6 @@ func RunLanguageScreen(cfg *Config, configFilePath string) {
 // PrintSummary prints the end-of-run summary to the console.
 func PrintSummary(cfg *Config, results StepResults) {
 	WriteSummary(os.Stdout, cfg, results)
-}
-
-// SummaryLines returns the summary as colored lines, for the live screen.
-func SummaryLines(cfg *Config, results StepResults) []string {
-	var b strings.Builder
-	WriteSummary(&b, cfg, results)
-	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 
 // WriteSummary writes the end-of-run summary to w.

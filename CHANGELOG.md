@@ -9,20 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Live cleaning screen.** Instead of a long scroll of `[OK]` lines, the run
-  now shows the file log in a scrolling pane, a pinned checklist of steps,
-  a status line (spinner, step, progress bar, items, space freed, elapsed
-  time) and a footer with live CPU/RAM. Falls back to plain output where the
-  console can't draw it.
+- **Live status while cleaning.** The classic file log now has a status line
+  pinned at the bottom: spinner, step, progress bar, files, space freed,
+  elapsed time, live CPU/RAM and the pause/abort keys. Falls back to plain
+  output where the console can't draw it.
+- **Output style setting** (`OUTPUT_STYLE`): Verbose (default) lists every
+  file as before; Minimal shows only a checklist of steps with file counts
+  and times.
 - **Pause and abort.** `P` pauses or resumes; `Q` aborts after the current
   item. Services stopped for a step are always restarted, and the summary
   marks steps that never ran as `not run`.
-- **Summary inside the live screen.** The end-of-run summary replaces the
-  file log, with the checklist and status lines staying pinned; scroll with
-  Up/Down (or W/S, PgUp/PgDn), ENTER exits. Nothing prints below the
-  layout, so it never scrolls out of place.
-- **Roomy window on first launch.** The admin relaunch opens Windows
-  Terminal maximized; a small classic console window is maximized.
 - **Safe close.** Closing the window, Ctrl+C, logoff or shutdown mid-run
   restarts any service stopped for cleaning and saves the run log. Ctrl+C
   during a run acts like Q.

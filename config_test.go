@@ -116,7 +116,7 @@ func TestDeepCleanupIsNeverPersisted(t *testing.T) {
 func TestConfigRoundTripsEveryToggle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cleaner_config.dat")
 
-	indices := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 101, 102, 103, 104, keepLogIndex}
+	indices := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 101, 102, 103, 104, keepLogIndex, outputStyleIndex}
 
 	cfg := DefaultConfig()
 	// Invert every toggle so the test cannot pass on defaults alone.

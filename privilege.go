@@ -19,7 +19,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"unsafe"
 
@@ -67,64 +66,25 @@ func EnsureAdmin() {
 	}
 
 	dir := filepath.Dir(exePath)
+	verbPtr, _ := windows.UTF16PtrFromString("runas")
+	filePtr, _ := windows.UTF16PtrFromString(exePath)
+	dirPtr, _ := windows.UTF16PtrFromString(dir)
 
-	// In Windows Terminal, relaunch through wt.exe so the admin window opens
-	// maximized: Windows Terminal ignores requests to resize an existing
-	// window, and its default size is too small for the live screen. If
-	// that fails for any reason, fall back to launching qc.exe directly.
-	ret := uintptr(0)
-	if wt := windowsTerminalPath(); wt != "" {
-		ret = shellRunAs(wt, `-w new --maximized "`+exePath+`"`, dir)
-	}
-	if ret <= 32 {
-		ret = shellRunAs(exePath, "", dir)
-	}
+	modshell32 := windows.NewLazySystemDLL("shell32.dll")
+	procShellExecuteW := modshell32.NewProc("ShellExecuteW")
+
+	ret, _, _ := procShellExecuteW.Call(
+		0,
+		uintptr(unsafe.Pointer(verbPtr)),
+		uintptr(unsafe.Pointer(filePtr)),
+		0,
+		uintptr(unsafe.Pointer(dirPtr)),
+		uintptr(5), // SW_SHOW
+	)
 
 	if ret <= 32 {
 		fmt.Printf("%s\n", Tf("priv.failed", ret))
 	}
 	RestoreConsoleMode()
 	os.Exit(0)
-}
-
-// windowsTerminalPath returns wt.exe's path when Quiesce is running inside
-// Windows Terminal and wt.exe can be found, else "".
-func windowsTerminalPath() string {
-	if os.Getenv("WT_SESSION") == "" && consoleWindowClass() != "PseudoConsoleWindow" {
-		return ""
-	}
-	p, err := exec.LookPath("wt.exe")
-	if err != nil {
-		return ""
-	}
-	return p
-}
-
-// shellRunAs starts file elevated (UAC prompt) and returns ShellExecute's
-// result: a value of 32 or less means it failed.
-func shellRunAs(file, params, dir string) uintptr {
-	verbPtr, _ := windows.UTF16PtrFromString("runas")
-	filePtr, err := windows.UTF16PtrFromString(file)
-	if err != nil {
-		return 0
-	}
-	dirPtr, _ := windows.UTF16PtrFromString(dir)
-	var paramsPtr *uint16
-	if params != "" {
-		if paramsPtr, err = windows.UTF16PtrFromString(params); err != nil {
-			return 0
-		}
-	}
-
-	modshell32 := windows.NewLazySystemDLL("shell32.dll")
-	procShellExecuteW := modshell32.NewProc("ShellExecuteW")
-	ret, _, _ := procShellExecuteW.Call(
-		0,
-		uintptr(unsafe.Pointer(verbPtr)),
-		uintptr(unsafe.Pointer(filePtr)),
-		uintptr(unsafe.Pointer(paramsPtr)),
-		uintptr(unsafe.Pointer(dirPtr)),
-		uintptr(5), // SW_SHOW
-	)
-	return ret
 }
