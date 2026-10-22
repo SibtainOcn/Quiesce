@@ -112,13 +112,24 @@ func TestDirectSummaryShowsOnlyChosenSteps(t *testing.T) {
 	var b strings.Builder
 	WriteSummary(&b, cfg, StepResults{})
 	out := b.String()
-	if !strings.Contains(out, "[10]") {
+	if !strings.Contains(stripANSI(out), "[1]  "+T("step.10.short")) {
 		t.Error("chosen step missing")
 	}
-	for _, s := range []string{"[1] ", "[11]", "[12]", T("common.skipped"), stripANSI(Tf("summary.total", 0))} {
+	for _, s := range []string{"[2]", "[10]", "[12]", T("common.skipped"), stripANSI(Tf("summary.total", 0))} {
 		if strings.Contains(stripANSI(out), s) {
 			t.Errorf("summary should not contain %q", s)
 		}
+	}
+
+	cfg = BuildRunConfig(DefaultConfig(), []string{"dns", "bin"})
+	b.Reset()
+	WriteSummary(&b, cfg, StepResults{})
+	plain := stripANSI(b.String())
+	if !strings.Contains(plain, "[1]  "+T("step.9.short")) || !strings.Contains(plain, "[2]  "+T("step.11.short")) {
+		t.Errorf("direct rows should be numbered from 1:\n%s", plain)
+	}
+	if strings.Contains(plain, Repo) {
+		t.Error("summary should not show the repo URL")
 	}
 
 	cfg = BuildRunConfig(DefaultConfig(), []string{"temp-1"})

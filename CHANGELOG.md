@@ -14,13 +14,14 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Commands chain: `qc temp-1 deep bin` runs just those steps, in menu order.
 - `qc --help` lists every command.
 - From a normal terminal, a direct command asks for admin (UAC) and then runs in that same terminal, with no second window. P, Q and Ctrl+C still work. If it can't share the terminal, it opens its own window as before.
-- Direct runs list only the chosen steps, both while running and in the summary. The item totals show only when a folder-cleaning step ran.
+- Direct runs list only the chosen steps, both while running and in the summary, numbered 1, 2, 3... The item totals show only when a folder-cleaning step ran.
 
 ### Changed
 
 - Commands are checked before elevation, so a typo never asks for Admin; unknown commands exit with code 2.
 - Direct runs never change the saved settings. Exit code 1 means the run was aborted or the admin prompt was declined.
 - A window opened just for a run waits for ENTER; a shared terminal returns to the prompt.
+- The end-of-run summary no longer prints the GitHub URL (`qc --version` still shows it).
 
 ### Fixed
 
