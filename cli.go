@@ -168,7 +168,7 @@ func ownsConsoleWindow() bool {
 func printCLICommands() {
 	fmt.Printf("  %s\n", T("help.commands"))
 	fmt.Println()
-	row := func(name, desc string) { fmt.Printf("    %-18s %s\n", name, desc) }
+	row := helpRow
 	row(cliAll, T("help.cmd_all"))
 	for _, c := range cliCommands {
 		name := c.name
@@ -189,7 +189,6 @@ func printCLICommands() {
 		row(name, desc)
 	}
 	fmt.Println()
-	fmt.Printf("  %s\n", Tf("help.chain", AppShort))
 	fmt.Printf("  %s\n", T("help.elevate"))
 	fmt.Println()
 }

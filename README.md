@@ -43,7 +43,8 @@ Every step can be customized in the menu settings, and your choices are saved au
 - **Genuine RAM Optimization**: Unlike fake memory cleaners that just force apps into page files, Quiesce directly asks the Windows kernel to flush modified memory and purge standby RAM list. It reports the real memory freed.
 - **Smart Service Handling**: Background Windows services (like Windows Update & Delivery Optimization) are safely stopped before cleaning their cache files and automatically restarted afterward.
 - **Safe by Default**: Risky options like emptying the Recycle Bin are disabled by default. Deep system cleanup automatically resets back to OFF after every run so it cannot repeat accidentally.
-- **Single File & Portable**: No installer required. Just run `qc.exe` anywhere.
+- **Single File & Portable**: No installer required. Just run `qc.exe` anywhere; `qc env` puts it on your PATH.
+- **Command Line Too**: Run any step directly (`qc temp ram`, `qc all`), update in place with `qc -u`, verified by SHA-256.
 - **Speaks Your Language**: The interface follows your Windows display language, falling back to English. English and Spanish ship today; adding a language takes one file and no code.
 
 ---
@@ -124,11 +125,40 @@ in that same terminal - no second window. `P`, `Q` and `Ctrl+C` work as usual.
 If the run can't share your terminal (for example, an admin account other than
 yours was used at the UAC prompt), it opens its own window instead.
 
-PowerShell doesn't run programs from the current folder by name, so inside
-the Quiesce folder type `.\qc dns`. To type `qc` from anywhere, add the folder
-that holds `qc.exe` to your `PATH`.
-
 Exit codes: `0` done, `1` aborted or admin declined, `2` unknown command.
+
+### Tools
+
+| Command | What it does |
+|---|---|
+| `qc -u` (`qc update`) | Update Quiesce to the latest release - see [Updating](#updating) |
+| `qc env` | Add Quiesce to your PATH, so `qc` works in any terminal |
+| `qc repo` (`qc github`) | Open the Quiesce page on GitHub in your browser |
+| `qc -v` (`--version`) | Version, author, license and the exe's own SHA-256 |
+| `qc -h` (`--help`) | Every command, with examples |
+
+### Run `qc` from anywhere
+
+On first run Quiesce offers to add itself to your PATH. You can also do it any
+time:
+
+```bash
+qc env
+```
+
+It adds the folder holding `qc.exe` to your **user** PATH (no admin needed),
+or says so if it is already there. Open a new terminal afterwards, then:
+
+```bash
+qc            # open the menu
+qc temp ram   # clean temp files and free RAM
+qc -u         # update Quiesce
+```
+
+Keep `qc.exe` in a permanent folder such as `C:\Tools` first: a temporary
+folder is refused, since cleaning empties it. Until then, PowerShell needs
+`.\qc` inside the Quiesce folder, as it doesn't run programs from the current
+folder by name.
 
 Pick how progress is shown with **Output style** in settings:
 
@@ -235,8 +265,9 @@ From the [latest release](https://github.com/SibtainOcn/Quiesce/releases/latest)
 - **`qc-64bit.exe`** - almost every Windows PC
 - **`qc-32bit.exe`** - 32-bit Windows only
 
-Save it as `qc.exe` and put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`)
-to run `qc` from any terminal. Later updates keep that name.
+Save it as `qc.exe` in a permanent folder (e.g. `C:\Tools`), run it once and
+answer **Y** to "Add Quiesce to your PATH", or run `qc env` later. Updates
+keep the `qc.exe` name.
 
 ---
 

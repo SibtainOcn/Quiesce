@@ -32,6 +32,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -44,6 +45,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 const (
@@ -123,12 +125,63 @@ func assetNames() []string {
 // while, so stalls are caught per read instead (see stallReader).
 var httpClient = &http.Client{
 	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy:                 systemProxy,
 		DialContext:           (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		TLSHandshakeTimeout:   15 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
 		IdleConnTimeout:       30 * time.Second,
 	},
+}
+
+// systemProxy uses HTTPS_PROXY/HTTP_PROXY when set, otherwise the fixed
+// proxy from Windows' Internet Options. PAC scripts are not supported.
+func systemProxy(req *http.Request) (*url.URL, error) {
+	if u, err := http.ProxyFromEnvironment(req); u != nil || err != nil {
+		return u, err
+	}
+	if h := req.URL.Hostname(); h == "localhost" || net.ParseIP(h).IsLoopback() {
+		return nil, nil
+	}
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.QUERY_VALUE)
+	if err != nil {
+		return nil, nil
+	}
+	defer k.Close()
+	if on, _, err := k.GetIntegerValue("ProxyEnable"); err != nil || on == 0 {
+		return nil, nil
+	}
+	server, _, err := k.GetStringValue("ProxyServer")
+	if err != nil {
+		return nil, nil
+	}
+	return parseWinProxy(server, req.URL.Scheme), nil
+}
+
+// parseWinProxy reads "host:port" or "http=h:p;https=h:p" for scheme.
+func parseWinProxy(server, scheme string) *url.URL {
+	pick := ""
+	for _, part := range strings.Split(server, ";") {
+		part = strings.TrimSpace(part)
+		if k, v, ok := strings.Cut(part, "="); ok {
+			if strings.EqualFold(k, scheme) || (pick == "" && strings.EqualFold(k, "http")) {
+				pick = v
+			}
+		} else if part != "" && pick == "" {
+			pick = part
+		}
+	}
+	if pick == "" {
+		return nil
+	}
+	if !strings.Contains(pick, "://") {
+		pick = "http://" + pick
+	}
+	u, err := url.Parse(pick)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	return u
 }
 
 // statusError is a non-200 reply from GitHub.

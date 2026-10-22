@@ -183,7 +183,3 @@
 "version.license" = "GPL-3.0-or-later - software libre, sin ninguna garantía"
 "version.compare" = "Compara con la suma de verificación en %s/releases"
 "help.tagline" = "%s v%s - Limpiador del sistema y optimizador de RAM para Windows"
-"help.usage" = "Uso: %s [opción]"
-"help.no_flag" = "(sin opción)       Abre el menú interactivo"
-"help.version" = "-v, --version      Versión, autor, licencia y suma de verificación"
-"help.help" = "-h, --help         Muestra esta ayuda"

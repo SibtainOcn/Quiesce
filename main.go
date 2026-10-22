@@ -79,6 +79,23 @@ func main() {
 		os.Exit(code)
 	}
 
+	// The user PATH needs no Admin, and writing it elevated could pick the
+	// wrong account's settings.
+	if !isAttached && len(args) == 1 {
+		var run func() int
+		switch strings.ToLower(strings.TrimSpace(args[0])) {
+		case "env":
+			run = RunPathCommand
+		case "repo", "github":
+			run = RunRepoCommand
+		}
+		if run != nil {
+			code := run()
+			RestoreConsoleMode()
+			os.Exit(code)
+		}
+	}
+
 	if !isAttached && HandleCLIFlags(args) {
 		return
 	}
@@ -133,6 +150,7 @@ func main() {
 	if firstRun && stdinIsConsole() {
 		AskAutoUpdate(cfg)
 		_ = SaveConfig(configFilePath, cfg)
+		OfferAddToPath()
 	}
 	StartUpdateCheck(cfg)
 

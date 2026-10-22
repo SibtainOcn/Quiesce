@@ -148,12 +148,29 @@ func PrintHelp() {
 	fmt.Println()
 	fmt.Printf("  %s\n", Tf("help.usage", AppShort))
 	fmt.Println()
-	fmt.Printf("    %s\n", T("help.no_flag"))
-	fmt.Printf("    %s\n", T("help.version"))
-	fmt.Printf("    %s\n", T("help.update"))
-	fmt.Printf("    %s\n", T("help.help"))
+	helpRow(AppShort, T("help.desc_menu"))
 	fmt.Println()
 	printCLICommands()
+
+	fmt.Printf("  %s\n\n", T("help.tools"))
+	helpRow("-u, update", T("help.desc_update"))
+	helpRow("env", T("help.desc_env"))
+	helpRow("repo, github", T("help.desc_repo"))
+	helpRow("-v, --version", T("help.desc_version"))
+	helpRow("-h, --help", T("help.desc_help"))
+	fmt.Println()
+
+	fmt.Printf("  %s\n\n", T("help.examples"))
+	helpRow(AppShort+" temp ram", T("help.ex_temp_ram"))
+	helpRow(AppShort+" temp-1 deep bin", T("help.ex_chain"))
+	helpRow(AppShort+" all", T("help.ex_all"))
+	helpRow(AppShort+" -u", T("help.ex_update"))
+	fmt.Println()
+}
+
+// helpRow prints one aligned "name  description" line.
+func helpRow(name, desc string) {
+	fmt.Printf("    %s%-20s%s %s\n", WHITE, name, RST, desc)
 }
 
 func isUpdateFlag(s string) bool {

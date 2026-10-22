@@ -20,6 +20,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Clear messages when updating fails: no internet, timeout, dropped download, GitHub rate limit or outage, blocked secure connection, full disk. Brief GitHub errors are retried, a stalled download stops after 30 seconds, and the current version is always left in place.
 - When GitHub's API rate limit is hit, `qc -u` falls back to the release page and its `SHA256SUMS.txt`; the daily check never uses the API.
 - Releases are built and published by GitHub Actions when a `v*` tag is pushed: tests, `qc-64bit.exe` and `qc-32bit.exe` with the version stamped in, `SHA256SUMS.txt`, and release notes from this file.
+- `qc env` adds the folder holding `qc.exe` to the user PATH (no admin needed), or says it is already there; new terminals pick it up at once. First run offers it too, with example commands. A temporary folder is refused, and another `qc.exe` earlier on PATH is pointed out.
+- `qc repo` (or `qc github`) opens the Quiesce GitHub page in the default browser.
+- `qc --help` is grouped into cleaning commands, tools and examples.
+- Updates use the proxy set in Windows' Internet Options when `HTTPS_PROXY` is not set.
 - First run asks whether to turn the update check on (`Y` by default). Change it later with **Auto update check** in settings (`AUTO_UPDATE` in `cleaner_config.dat`).
 
 ### Changed

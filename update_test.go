@@ -193,6 +193,25 @@ func TestDownloadWithoutKnownSize(t *testing.T) {
 	}
 }
 
+func TestParseWinProxy(t *testing.T) {
+	cases := []struct{ server, scheme, want string }{
+		{"proxy.corp:8080", "https", "http://proxy.corp:8080"},
+		{"http=a:80;https=b:443", "https", "http://b:443"},
+		{"http=a:80;ftp=c:21", "https", "http://a:80"},
+		{"socks=s:1080", "https", ""},
+		{"", "https", ""},
+	}
+	for _, c := range cases {
+		got := ""
+		if u := parseWinProxy(c.server, c.scheme); u != nil {
+			got = u.String()
+		}
+		if got != c.want {
+			t.Errorf("parseWinProxy(%q) = %q, want %q", c.server, got, c.want)
+		}
+	}
+}
+
 func TestUpdateHintOffWhenDisabled(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.AutoUpdate = 0
