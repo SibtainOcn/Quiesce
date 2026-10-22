@@ -7,6 +7,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `qc uninstall` removes Quiesce, its settings, logs and PATH entry. `-y` skips the question.
+
 ## [2.5.1] - 2026-10-22
 
 ### Added

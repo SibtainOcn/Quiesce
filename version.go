@@ -156,6 +156,7 @@ func PrintHelp() {
 	helpRow("-u, update", T("help.desc_update"))
 	helpRow("env", T("help.desc_env"))
 	helpRow("repo, github", T("help.desc_repo"))
+	helpRow("uninstall [-y]", T("help.desc_uninstall"))
 	helpRow("-v, --version", T("help.desc_version"))
 	helpRow("-h, --help", T("help.desc_help"))
 	fmt.Println()

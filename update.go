@@ -815,8 +815,12 @@ func releaseNotes(body string, maxLines int) string {
 // spinStep shows "⠋ label  detail" while fn runs, then a ✓ or ! line.
 func spinStep(label string, fn func(set func(string)) error) error {
 	if !stdoutSupportsVT() {
-		err := fn(func(string) {})
+		last := ""
+		err := fn(func(s string) { last = s })
 		if err == nil {
+			if last != "" {
+				label += "  " + last
+			}
 			fmt.Printf("  %s\n", label)
 		}
 		return err

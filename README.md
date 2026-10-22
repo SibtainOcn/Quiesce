@@ -35,6 +35,7 @@ qc            # open the menu
 qc all        # clean with your saved settings
 qc temp ram   # just temp files and memory
 qc -u         # update Quiesce
+qc uninstall  # remove Quiesce, its settings and PATH entry
 ```
 
 **[Full guide: every command, key and setting →](docs/USAGE.md)**

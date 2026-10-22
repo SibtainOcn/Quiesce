@@ -386,6 +386,7 @@ func printPathExamples() {
 		{"qc all", T("env.ex_all")},
 		{"qc temp ram", T("env.ex_temp_ram")},
 		{"qc -u", T("env.ex_update")},
+		{"qc uninstall", T("env.ex_uninstall")},
 		{"qc --help", T("env.ex_help")},
 	}
 	for _, e := range ex {
