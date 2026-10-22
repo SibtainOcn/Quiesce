@@ -46,7 +46,7 @@ var cliCommands = []cliCommand{
 	{name: "prefetch", step: 3, apply: func(c *Config) { c.Prefetch = 1 }},
 	{name: "errors", aliases: []string{"wer"}, step: 4, apply: func(c *Config) { c.ErrorReports = 1 }},
 	{name: "delivery", step: 5, apply: func(c *Config) { c.DeliveryOpt = 1 }},
-	{name: "update", aliases: []string{"wu"}, step: 6, apply: func(c *Config) { c.WinUpdate = 1 }},
+	{name: "win-update", aliases: []string{"wu"}, step: 6, apply: func(c *Config) { c.WinUpdate = 1 }},
 	{name: "logs", step: 7, apply: func(c *Config) { c.LogFiles = 1 }},
 	{name: "installer", step: 8, apply: func(c *Config) { c.InstallerTemp = 1 }},
 	{name: "dns", step: 9, apply: func(c *Config) { c.DnsFlush = 1 }},
@@ -168,7 +168,7 @@ func ownsConsoleWindow() bool {
 func printCLICommands() {
 	fmt.Printf("  %s\n", T("help.commands"))
 	fmt.Println()
-	row := func(name, desc string) { fmt.Printf("    %-18s %s\n", name, desc) }
+	row := helpRow
 	row(cliAll, T("help.cmd_all"))
 	for _, c := range cliCommands {
 		name := c.name
@@ -189,7 +189,6 @@ func printCLICommands() {
 		row(name, desc)
 	}
 	fmt.Println()
-	fmt.Printf("  %s\n", Tf("help.chain", AppShort))
 	fmt.Printf("  %s\n", T("help.elevate"))
 	fmt.Println()
 }

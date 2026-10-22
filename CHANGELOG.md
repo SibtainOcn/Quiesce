@@ -9,12 +9,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Direct run commands that skip the menu, e.g. `qc temp-1`, `qc ram`, `qc bin`, `qc deep`. Every step has one: `temp` (both temp folders), `temp-1`, `temp-2`, `prefetch`, `errors`, `delivery`, `update`, `logs`, `installer`, `dns`, `ram` (all 4 sub-options), `ram-1` to `ram-4`, `bin`, `deep`.
+- Direct run commands that skip the menu, e.g. `qc temp-1`, `qc ram`, `qc bin`, `qc deep`. Every step has one: `temp` (both temp folders), `temp-1`, `temp-2`, `prefetch`, `errors`, `delivery`, `win-update` (or `wu`), `logs`, `installer`, `dns`, `ram` (all 4 sub-options), `ram-1` to `ram-4`, `bin`, `deep`.
 - `qc all` runs every step that is ON in the saved settings.
 - Commands chain: `qc temp-1 deep bin` runs just those steps, in menu order.
 - `qc --help` lists every command.
 - From a normal terminal, a direct command asks for admin (UAC) and then runs in that same terminal, with no second window. P, Q and Ctrl+C still work. If it can't share the terminal, it opens its own window as before.
 - Direct runs list only the chosen steps, both while running and in the summary, numbered 1, 2, 3... The item totals show only when a folder-cleaning step ran.
+- Self-update: `qc -u` (or `qc update`) downloads the latest release, checks it against the SHA-256 GitHub publishes, test-runs it, then swaps it in, rolling back if any step fails. Steps show with the same spinner as cleaning, followed by the release notes. Admin is asked for only when the `qc.exe` folder needs it.
+- Daily update check: at most once a day, in the background, Quiesce checks for a new release and shows `Update available ... run qc -u` at the top of the menu and above direct-run summaries. Nothing installs on its own.
+- Clear messages when updating fails: no internet, timeout, dropped download, GitHub rate limit or outage, blocked secure connection, full disk. Brief GitHub errors are retried, a stalled download stops after 30 seconds, and the current version is always left in place.
+- When GitHub's API rate limit is hit, `qc -u` falls back to the release page and its `SHA256SUMS.txt`; the daily check never uses the API.
+- Releases are built and published by GitHub Actions when a `v*` tag is pushed: tests, `qc-64bit.exe` and `qc-32bit.exe` with the version stamped in, `SHA256SUMS.txt`, and release notes from this file.
+- `qc env` adds the folder holding `qc.exe` to the user PATH (no admin needed), or says it is already there; new terminals pick it up at once. First run offers it too, with example commands. A temporary folder is refused, and another `qc.exe` earlier on PATH is pointed out.
+- No renaming needed: run the downloaded `qc-64bit.exe` and answer yes, or run `qc env`, and it installs itself as `%LOCALAPPDATA%\Programs\Quiesce\qc.exe` (no admin) and adds that folder to PATH. A `qc.exe` already kept in a permanent folder just has its own folder added.
+- One-line install: `irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex` downloads the latest release from GitHub only, checks its SHA-256 (deleting it on a mismatch) and installs it. Works in Windows PowerShell 5.1 and PowerShell 7.
+- Release notes list the SHA-256 of each file, and the README explains how to verify a download.
+- `qc repo` (or `qc github`) opens the Quiesce GitHub page in the default browser.
+- `qc --help` is grouped into cleaning commands, tools and examples.
+- README rewritten short and plain. The full guide moved to `docs/USAGE.md`, and building and releasing to `docs/DEVELOPING.md`.
+- Updates use the proxy set in Windows' Internet Options when `HTTPS_PROXY` is not set.
+- First run asks whether to turn the update check on (`Y` by default). Change it later with **Auto update check** in settings (`AUTO_UPDATE` in `cleaner_config.dat`).
 
 ### Changed
 

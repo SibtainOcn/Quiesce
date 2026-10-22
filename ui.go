@@ -422,16 +422,20 @@ func mainLabelWidth() int {
 const (
 	keepLogIndex     = 201 // save a log file of each run
 	outputStyleIndex = 202 // verbose or minimal progress display
+	autoUpdateIndex  = 203 // daily update check and hint
 )
 
-var optionIndices = []int{outputStyleIndex, keepLogIndex}
+var optionIndices = []int{outputStyleIndex, keepLogIndex, autoUpdateIndex}
 
 // optionLabel is indented past the "[n] " column so the option names line
 // up with the step names above them.
 func optionLabel(index int) string {
 	name := T("opt.keep_log")
-	if index == outputStyleIndex {
+	switch index {
+	case outputStyleIndex:
 		name = T("opt.output_style")
+	case autoUpdateIndex:
+		name = T("opt.auto_update")
 	}
 	return fmt.Sprintf("%-5s%s", "", name)
 }
@@ -455,7 +459,7 @@ func subLabelWidth() int {
 // GetCfgDispName returns the display label for a config index, already
 // padded so the ON/OFF column that follows lines up with its group.
 func GetCfgDispName(index int) string {
-	if index == keepLogIndex || index == outputStyleIndex {
+	if index >= keepLogIndex {
 		return padRight(optionLabel(index), mainLabelWidth())
 	}
 	if index >= 101 {
@@ -522,7 +526,12 @@ func DrawMainMenu(cfg *Config, osP1, osP2, host, user string) int {
 		row++
 	}
 
-	pln()
+	// The top row carries the update hint, when there is one.
+	if hint := UpdateHint(cfg); hint != "" {
+		pf("  %s\n", hint)
+	} else {
+		pln()
+	}
 	// Reserve the stats row but leave it EMPTY - StartLiveStatsRow paints it
 	// immediately and then once a second. Printing a static line here too
 	// would mean two stats lines on screen (a stale one and a live one).
@@ -809,6 +818,12 @@ func PrintSummary(cfg *Config, results StepResults) {
 // WriteSummary writes the end-of-run summary to w.
 func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 	fmt.Fprintln(w)
+	// Direct runs skip the menu, so the update hint goes above the summary.
+	if cfg.directRun {
+		if hint := UpdateHint(cfg); hint != "" {
+			fmt.Fprintf(w, "  %s\n\n", hint)
+		}
+	}
 	fmt.Fprintln(w, "+---------------------------------------+")
 	fmt.Fprintln(w, centerInBox(T("summary.title")))
 	fmt.Fprintln(w, "+---------------------------------------+")

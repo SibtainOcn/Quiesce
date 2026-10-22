@@ -56,6 +56,10 @@ type Config struct {
 	// OutputStyle: 0 = verbose file log, 1 = minimal checklist (default).
 	OutputStyle int
 
+	// AutoUpdate: check for a new release once a day and show a hint.
+	// Installing is always done by the user with qc -u.
+	AutoUpdate int
+
 	// Language is the optional UI language override ("en", "es", ...). Empty
 	// means follow the Windows display language.
 	//
@@ -90,6 +94,7 @@ func DefaultConfig() *Config {
 		RamTrimWorkingSets: 0, // opt-in: aggressive, causes hard faults afterwards
 
 		OutputStyle: int(StyleMinimal),
+		AutoUpdate:  1,
 	}
 }
 
@@ -184,6 +189,8 @@ func LoadConfig(filePath string) (*Config, error) {
 			cfg.KeepLog = val
 		case "OUTPUT_STYLE":
 			cfg.OutputStyle = val
+		case "AUTO_UPDATE":
+			cfg.AutoUpdate = val
 		}
 	}
 
@@ -192,7 +199,7 @@ func LoadConfig(filePath string) (*Config, error) {
 
 func SaveConfig(filePath string, cfg *Config) error {
 	content := fmt.Sprintf(
-		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\nKEEP_LOG=%d\nOUTPUT_STYLE=%d\n",
+		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\nKEEP_LOG=%d\nOUTPUT_STYLE=%d\nAUTO_UPDATE=%d\n",
 		cfg.WinTemp,
 		cfg.UserTemp,
 		cfg.Prefetch,
@@ -210,6 +217,7 @@ func SaveConfig(filePath string, cfg *Config) error {
 		cfg.RamTrimWorkingSets,
 		cfg.KeepLog,
 		cfg.OutputStyle,
+		cfg.AutoUpdate,
 	)
 
 	// Preserve an explicit language override across saves. It is only written
@@ -260,6 +268,8 @@ func (c *Config) GetVal(index int) int {
 		return c.KeepLog
 	case outputStyleIndex:
 		return c.OutputStyle
+	case autoUpdateIndex:
+		return c.AutoUpdate
 	default:
 		return 0
 	}
@@ -301,5 +311,7 @@ func (c *Config) SetVal(index int, val int) {
 		c.KeepLog = val
 	case outputStyleIndex:
 		c.OutputStyle = val
+	case autoUpdateIndex:
+		c.AutoUpdate = val
 	}
 }

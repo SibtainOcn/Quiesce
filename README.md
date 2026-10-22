@@ -12,185 +12,103 @@ A fast, lightweight Windows system cleaner and RAM optimizer. Single executable,
 
 ---
 
+## Get started
 
-## What It Cleans
+**One line** - open PowerShell and paste:
 
-| # | Cleaning Step | Description | Default |
+```powershell
+irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex
+```
+
+It downloads the latest release from this repository, checks its SHA-256, and
+installs `qc` so it works in any terminal. No admin needed.
+
+**Or by hand** - download **`qc-64bit.exe`** (or `qc-32bit.exe` for 32-bit
+Windows) from the [latest release](https://github.com/SibtainOcn/Quiesce/releases/latest),
+[verify it](#verify-your-download), run it and say **yes** to "Install Quiesce".
+No renaming or moving needed.
+
+Then type `qc` in any terminal:
+
+```bash
+qc            # open the menu
+qc all        # clean with your saved settings
+qc temp ram   # just temp files and memory
+qc -u         # update Quiesce
+```
+
+**[Full guide: every command, key and setting →](docs/USAGE.md)**
+
+---
+
+## Verify your download
+
+Every release lists the SHA-256 checksum of each file in its notes and in
+`SHA256SUMS.txt`. Check yours in PowerShell:
+
+```powershell
+Get-FileHash .\qc-64bit.exe -Algorithm SHA256
+```
+
+The value must match the release page exactly.
+
+> [!CAUTION]
+> **If the checksum does not match, delete the file immediately and do not run it.**
+> Quiesce runs with administrator rights. The only official source is the
+> [GitHub Releases page](https://github.com/SibtainOcn/Quiesce/releases) of this
+> repository. Copies from any other website, mirror, repository or person are
+> unofficial and not trusted - do not run them.
+
+The one-line installer and `qc -u` do this check for you and refuse any file
+that doesn't match.
+
+---
+
+## What it cleans
+
+| # | Step | What it removes | Default |
 |---|---|---|---|
-| **1** | Windows Temp | System temporary files created by Windows | **ON** |
-| **2** | User Temp | Temporary files created by applications you run | **ON** |
-| **3** | Prefetch | Windows application launch cache | **ON** |
-| **4** | Windows Error Reports | Crash dumps and error log files | **ON** |
-| **5** | Delivery Optimization Cache | Downloaded Windows update distribution files | **ON** |
-| **6** | Windows Update Cache | Leftover update installation files | **ON** |
-| **7** | Windows Log Files | System and application activity logs | **ON** |
-| **8** | Installer Cache | Temporary Windows Installer patch cache files | **ON** |
-| **9** | DNS Resolver Cache | Flushes cached DNS records to refresh connection | **ON** |
-| **10** | RAM Optimization | Clears standby memory & dirty page lists | **ON** |
-| | ├ Flush modified list | Writes dirty pages to disk so they can be freed | **ON** |
-| | ├ Purge standby list | Frees the cached/standby page list | **ON** |
-| | ├ System file cache | Drops the kernel's cached file data | **OFF** (Opt-in) |
-| | └ Trim working sets | Pages out live app memory — frees the most, but apps re-read it from disk afterwards | **OFF** (Opt-in) |
-| **11** | Recycle Bin | Empties the Windows Recycle Bin | **OFF** (Opt-in) |
-| **12** | Deep Cleanup | Full Windows Disk Cleanup (cleanmgr, all handlers) | **OFF** (Resets after run) |
+| 1 | Windows Temp | Temporary files Windows leaves behind | ON |
+| 2 | User Temp | Temporary files your apps leave behind | ON |
+| 3 | Prefetch | App launch cache | ON |
+| 4 | Error Reports | Crash reports | ON |
+| 5 | Delivery Optimization | Windows update sharing cache | ON |
+| 6 | Windows Update Cache | Leftover update files | ON |
+| 7 | Log Files | Windows activity logs | ON |
+| 8 | Installer Temp | Leftover installer files | ON |
+| 9 | DNS Cache | Saved website addresses, to refresh your connection | ON |
+| 10 | RAM | Frees memory that is held but not in use | ON |
+| 11 | Recycle Bin | Empties it | OFF |
+| 12 | Deep Cleanup | Full Windows Disk Cleanup, then turns itself off | OFF |
 
-Every step can be customized in the menu settings, and your choices are saved automatically.
+Change any of these in the menu settings (`F`). Your choices are saved.
 
 ---
 
-## Key Features
+## Why Quiesce
 
-- **Genuine RAM Optimization**: Unlike fake memory cleaners that just force apps into page files, Quiesce directly asks the Windows kernel to flush modified memory and purge standby RAM list. It reports the real memory freed.
-- **Smart Service Handling**: Background Windows services (like Windows Update & Delivery Optimization) are safely stopped before cleaning their cache files and automatically restarted afterward.
-- **Safe by Default**: Risky options like emptying the Recycle Bin are disabled by default. Deep system cleanup automatically resets back to OFF after every run so it cannot repeat accidentally.
-- **Single File & Portable**: No installer required. Just run `qc.exe` anywhere.
-- **Speaks Your Language**: The interface follows your Windows display language, falling back to English. English and Spanish ship today; adding a language takes one file and no code.
-
----
-
-## Language
-
-Quiesce reads your Windows display language at startup. To change it, press
-**F** for settings, then **L**, pick a language by number, and press **E** to
-save. Your choice is remembered.
-
-You can also set it by hand in `cleaner_config.dat` (next to `qc.exe`):
-
-```text
-LANGUAGE=es
-```
-
-| Code | Language |
-|---|---|
-| `en` | English |
-| `es` | Español |
-
-Want your language? It takes one file, no Go code — see
-[docs/TRANSLATING.md](docs/TRANSLATING.md). Pull requests welcome.
+- **Frees real memory** - asks Windows itself to release memory that is held but unused, and shows how much was freed.
+- **Safe by default** - the Recycle Bin is left alone unless you turn it on, and Deep Cleanup switches itself off after one run. Windows services paused for cleaning are always started again, even if you close the window.
+- **Fast from the terminal** - run any step directly (`qc temp ram`), chain them, and see live progress you can pause or stop.
+- **One small file** - no installer. Updates itself with `qc -u`, and checks every download before using it.
+- **Your language** - follows your Windows language. English and Spanish today; [adding one](docs/TRANSLATING.md) takes a single file.
 
 ---
 
-## How to Use
+## Guides
 
-Launch **`qc.exe`** as Administrator:
-
-```text
-  ENTER    Run cleaner with current settings
-  F        Open settings menu
-
-While Cleaning:
-  P        Pause / resume
-  Q        Abort (stops safely, restarts any stopped services)
-  Ctrl+C   Same as Q
-
-Settings Controls:
-  W / S    Move selection Up / Down
-  D / A    Toggle step ON / OFF
-  L        Choose language
-  E        Save & return to main menu
-```
-
-### Direct commands
-
-Skip the menu and run steps straight from a terminal:
-
-```bash
-qc all              # every step ON in your saved settings
-qc temp             # Windows Temp + User Temp
-qc temp-1 deep bin  # chain any steps together
-```
-
-| Command | Step |
-|---|---|
-| `temp-1`, `temp-2`, `temp` | Windows Temp, User Temp, both |
-| `prefetch` | Prefetch folder |
-| `errors` (`wer`) | Windows Error Reports |
-| `delivery` | Delivery Optimization |
-| `update` (`wu`) | Windows Update Cache |
-| `logs` | Windows Log Files |
-| `installer` | Windows Installer Temp |
-| `dns` | DNS Cache Flush |
-| `ram` | RAM Optimization, all 4 sub-options |
-| `ram-1` … `ram-4` | Flush modified, purge standby, file cache, trim working sets |
-| `bin` (`recycle`) | Empty Recycle Bin |
-| `deep` | Deep Cleanup |
-
-Commands only pick what runs this time; saved settings are never changed.
-Output style and the log file option still apply. Only the steps you chose
-are listed while it runs. `qc --help` shows the list.
-
-From a normal (non-admin) terminal, approve the UAC prompt and the run shows
-in that same terminal - no second window. `P`, `Q` and `Ctrl+C` work as usual.
-If the run can't share your terminal (for example, an admin account other than
-yours was used at the UAC prompt), it opens its own window instead.
-
-PowerShell doesn't run programs from the current folder by name, so inside
-the Quiesce folder type `.\qc dns`. To type `qc` from anywhere, add the folder
-that holds `qc.exe` to your `PATH`.
-
-Exit codes: `0` done, `1` aborted or admin declined, `2` unknown command.
-
-Pick how progress is shown with **Output style** in settings:
-
-- **Minimal** (default): a checklist of steps that ticks over with each step's
-  file count and time, plus the file being removed right now.
-- **Verbose**: every removed file is listed, with a status line pinned at the
-  bottom (step, progress, files, space freed, time, live CPU/RAM and the
-  pause/abort keys).
-
-To keep the full list of what was removed, switch on **Save a log file of each
-run**: each run is written to a `logs` folder next to `qc.exe` (off by
-default). Closing the window mid-run still restarts any Windows service that
-was stopped for cleaning.
-
----
-
-## Verifying Your Copy
-
-Quiesce runs with Administrator rights, so it's worth confirming the binary you
-have is the official one. Every build carries its own identity:
-
-```bash
-qc --version
-```
-
-This prints the version, author, repository, license and the executable's own
-SHA-256 — and it does **not** require Administrator. Compare that hash against
-the checksum published with the [official release](https://github.com/SibtainOcn/Quiesce/releases).
-A mismatch means the binary is not an official build.
-
----
-
-## Building from Source
-
-Requires Go 1.23+ on Windows:
-
-```bash
-go build -o qc.exe
-```
-
-The commit hash and build time are stamped in automatically from git. To set an
-explicit version string:
-
-```bash
-go build -trimpath -ldflags "-s -w -X main.Version=2.5.0" -o qc.exe
-```
+- **[Using Quiesce](docs/USAGE.md)** - commands, menu keys, settings, updating
+- **[Translating](docs/TRANSLATING.md)** - add your language
+- **[Developing](docs/DEVELOPING.md)** - build, test and release
 
 ---
 
 ## Requirements
 
-- **OS**: Windows 10 or 11 (64-bit)
-- **Privileges**: Administrator (will prompt via UAC when you run a clean)
-
-### Download
-
-**[⬇ Download qc.exe](https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc.exe)** — always the latest release.
-
-Put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`) to run `qc` from any terminal.
+Windows 10 or 11. Cleaning needs administrator rights; Quiesce asks when it needs them.
 
 ---
 
 ## License
 
-- **License**: [GPL-3.0-or-later](LICENSE)
+[GPL-3.0-or-later](LICENSE) - free to use, share and change.

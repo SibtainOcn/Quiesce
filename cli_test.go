@@ -11,7 +11,7 @@ func TestParseRunArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"temp-1", "deep", "bin", "update"}
+	want := []string{"temp-1", "deep", "bin", "win-update"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -20,7 +20,7 @@ func TestParseRunArgs(t *testing.T) {
 		t.Errorf("no args: got %v, %v", got, err)
 	}
 
-	for _, bad := range [][]string{{"temp-3"}, {"temp", "nope"}, {"ram-5"}, {"--temp"}} {
+	for _, bad := range [][]string{{"temp-3"}, {"temp", "nope"}, {"ram-5"}, {"--temp"}, {"temp", "update"}} {
 		if _, err := ParseRunArgs(bad); err == nil {
 			t.Errorf("%v: expected an error", bad)
 		}

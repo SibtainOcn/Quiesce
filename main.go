@@ -70,6 +70,31 @@ func main() {
 	// LoadConfig would otherwise run.
 	configFilePath := ConfigFilePath()
 	InitLanguage(configFilePath)
+	RemoveOldBinary()
+
+	// Updating needs Admin only when qc.exe's folder does, so it runs here.
+	if len(args) == 1 && isUpdateFlag(args[0]) {
+		code := RunSelfUpdate(isAttached)
+		RestoreConsoleMode()
+		os.Exit(code)
+	}
+
+	// The user PATH needs no Admin, and writing it elevated could pick the
+	// wrong account's settings.
+	if !isAttached && len(args) == 1 {
+		var run func() int
+		switch strings.ToLower(strings.TrimSpace(args[0])) {
+		case "env":
+			run = RunPathCommand
+		case "repo", "github":
+			run = RunRepoCommand
+		}
+		if run != nil {
+			code := run()
+			RestoreConsoleMode()
+			os.Exit(code)
+		}
+	}
 
 	if !isAttached && HandleCLIFlags(args) {
 		return
@@ -116,10 +141,18 @@ func main() {
 	InstallShutdownHandler()
 
 	// Load configuration
+	_, statErr := os.Stat(configFilePath)
+	firstRun := os.IsNotExist(statErr)
 	cfg, err := LoadConfig(configFilePath)
 	if err != nil {
 		fmt.Printf("%s\n", Tf("common.config_warn", err))
 	}
+	if firstRun && stdinIsConsole() {
+		AskAutoUpdate(cfg)
+		_ = SaveConfig(configFilePath, cfg)
+		OfferAddToPath()
+	}
+	StartUpdateCheck(cfg)
 
 	if len(runCmds) > 0 {
 		code := RunCLI(cfg, runCmds)
