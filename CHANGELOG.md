@@ -7,13 +7,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-22
+
+### Added
+
+- Live progress while cleaning, in two styles set by `OUTPUT_STYLE`: Minimal (default) step checklist with the current file, or Verbose file log with a pinned status line.
+- Status shows step, progress bar, files, space freed, elapsed time and live CPU/RAM.
+- `P` pauses/resumes and `Q` or Ctrl+C aborts safely; unrun steps show as `not run`, cut-short steps as partial.
+- Closing the window mid-run restarts any stopped service and saves the run log.
+- Optional run log (`KEEP_LOG`, off by default) in `logs\` next to `qc.exe`.
+
 ### Changed
 
-- **New coloured logo** replaces the old black-and-white one, in the exe icon
-  and the README. Source in `assets/quiesce-logo-source.png`;
-  `tools/make-icons.py` crops it, removes the black background and writes
-  `assets/quiesce-logo.png` and `winres/icon/<size>.png` (16-256 px), then
-  `go-winres make --arch amd64,386` rebuilds the `.syso` resources.
+- New coloured logo for the exe icon and README.
+- Cleaning runs through a reusable task runner and shared file helpers; a crashing step is isolated and the run continues.
+- New strings are English-only for now; Spanish shows them in English.
+
+### Fixed
+
+- Missing translations fall back to English instead of showing the raw key.
+- A folder root that is a link or junction is no longer cleaned through.
 
 ## [2.4.0] - 2026-08-19
 

@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -64,6 +65,8 @@ const (
 	CYAN   = "\x1b[36m"
 	WHITE  = "\x1b[97m"
 	YELLOW = "\x1b[33m"
+	GREEN  = "\x1b[32m"
+	DIM    = "\x1b[90m"
 	RST    = "\x1b[0m"
 )
 
@@ -293,14 +296,6 @@ func SetConsoleTitle(title string) {
 	procSetConsoleTitle.Call(uintptr(unsafe.Pointer(titlePtr)))
 }
 
-// TypeLine prints a line, then pauses briefly. Used only for step headers
-// and summary banners so the console feels like it's "revealing" progress,
-// without slowing down the actual fast file deletion or RAM stat output.
-func TypeLine(s string, delay time.Duration) {
-	fmt.Println(s)
-	time.Sleep(delay)
-}
-
 func ClearScreen() {
 	fmt.Print("\x1b[H\x1b[2J\x1b[3J")
 }
@@ -416,7 +411,37 @@ func mainLabelWidth() int {
 		plain, _ := stepLabel(i)
 		w = max(w, len([]rune(plain)))
 	}
+	for _, i := range optionIndices {
+		w = max(w, len([]rune(optionLabel(i))))
+	}
 	return w
+}
+
+// Settings-screen indices of the options that are not cleaning steps. They
+// sit outside 1-12 and 101-104 so step loops never pick them up.
+const (
+	keepLogIndex     = 201 // save a log file of each run
+	outputStyleIndex = 202 // verbose or minimal progress display
+)
+
+var optionIndices = []int{outputStyleIndex, keepLogIndex}
+
+// optionLabel is indented past the "[n] " column so the option names line
+// up with the step names above them.
+func optionLabel(index int) string {
+	name := T("opt.keep_log")
+	if index == outputStyleIndex {
+		name = T("opt.output_style")
+	}
+	return fmt.Sprintf("%-5s%s", "", name)
+}
+
+// RenderStyle formats the output style setting as [VERBOSE] or [MINIMAL].
+func RenderStyle(style int) string {
+	if style == int(StyleMinimal) {
+		return fmt.Sprintf("%s[%s]%s", CYAN, T("opt.minimal"), RST)
+	}
+	return fmt.Sprintf("%s[%s]%s", RED, T("opt.verbose"), RST)
 }
 
 func subLabelWidth() int {
@@ -430,6 +455,9 @@ func subLabelWidth() int {
 // GetCfgDispName returns the display label for a config index, already
 // padded so the ON/OFF column that follows lines up with its group.
 func GetCfgDispName(index int) string {
+	if index == keepLogIndex || index == outputStyleIndex {
+		return padRight(optionLabel(index), mainLabelWidth())
+	}
 	if index >= 101 {
 		return padRight(subLabel(index), subLabelWidth())
 	}
@@ -443,30 +471,10 @@ func GetCfgDispName(index int) string {
 	return colored
 }
 
-// StepHeader prints the "[n/12] <action>..." banner shown while a step runs.
-// Deep Cleanup (12) is printed in red, as it always was, because it is the
-// one destructive step.
-func StepHeader(idx int) {
-	head := fmt.Sprintf("[%d/12] %s", idx, T(fmt.Sprintf("step.%d.action", idx)))
-	if idx == 12 {
-		head = RED + head + RST
-	}
-	TypeLine(head, 0)
-}
-
-// StepSkipped prints the one-line "[n/12] <name> - SKIPPED" notice for a step
-// that is switched off. The label is padded to the widest "[n/12] <name>" in
-// the current language so every dash lines up, which is what the typed
-// trailing spaces in the original English strings were doing by hand.
-func StepSkipped(idx int) {
-	head := func(i int) string {
-		return fmt.Sprintf("[%d/12] %s", i, T(fmt.Sprintf("step.%d.name", i)))
-	}
-	w := 0
-	for i := 1; i <= 12; i++ {
-		w = max(w, len([]rune(head(i))))
-	}
-	fmt.Printf("%s - %s%s%s\n", padRight(head(idx), w), CYAN, T("common.skipped"), RST)
+// stepHeaderText is the "[n/12] <action>" banner logged when a step starts.
+// The live view prints Deep Cleanup's in red (Task.Alert).
+func stepHeaderText(idx int) string {
+	return fmt.Sprintf("[%d/12] %s", idx, T(fmt.Sprintf("step.%d.action", idx)))
 }
 
 // selectedMark is the tick shown beside the active language. The console is
@@ -572,6 +580,7 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 	entries := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	entries = append(entries, ramSubOptions...)
 	entries = append(entries, 11, 12)
+	entries = append(entries, optionIndices...)
 
 	// sel is a position in entries, not a config index.
 	sel := 0
@@ -607,6 +616,12 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 		}
 
 		for pos, idx := range entries {
+			// The options are not cleaning steps; a blank line sets them
+			// apart.
+			if idx == optionIndices[0] {
+				fmt.Println()
+				row++
+			}
 			row++
 			a := "   "
 			if sel == pos {
@@ -621,7 +636,11 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			if idx == 12 {
 				on = cfg.DeepCleanup == 1
 			}
-			fmt.Printf("   %s : %s%s\n", GetCfgDispName(idx), RenderToggle(on), a)
+			value := RenderToggle(on)
+			if idx == outputStyleIndex {
+				value = RenderStyle(cfg.OutputStyle)
+			}
+			fmt.Printf("   %s : %s%s\n", GetCfgDispName(idx), value, a)
 		}
 
 		pln()
@@ -653,17 +672,28 @@ func RunSettingsScreen(cfg *Config, configFilePath string) {
 			if sel > len(entries)-1 {
 				sel = 0
 			}
-		case "a":
+		case "a", "d":
+			// Output style has two values, not ON/OFF: A and D both
+			// switch it between verbose and minimal.
+			if entries[sel] == outputStyleIndex {
+				cfg.OutputStyle = 1 - cfg.OutputStyle
+				if cfg.OutputStyle != int(StyleMinimal) {
+					cfg.OutputStyle = int(StyleVerbose)
+				}
+				break
+			}
+			if chStr == "d" {
+				if entries[sel] == 12 {
+					cfg.DeepCleanup = 1
+				} else {
+					cfg.SetVal(entries[sel], 1)
+				}
+				break
+			}
 			if entries[sel] == 12 {
 				cfg.DeepCleanup = 0
 			} else {
 				cfg.SetVal(entries[sel], 0)
-			}
-		case "d":
-			if entries[sel] == 12 {
-				cfg.DeepCleanup = 1
-			} else {
-				cfg.SetVal(entries[sel], 1)
 			}
 		case "l":
 			// The picker redraws this screen in the new language on return,
@@ -771,15 +801,24 @@ func RunLanguageScreen(cfg *Config, configFilePath string) {
 	}
 }
 
+// PrintSummary prints the end-of-run summary to the console.
 func PrintSummary(cfg *Config, results StepResults) {
-	fmt.Println()
-	fmt.Println("+---------------------------------------+")
-	fmt.Println(centerInBox(T("summary.title")))
-	fmt.Println("+---------------------------------------+")
-	fmt.Println()
-	fmt.Printf("  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
-	fmt.Printf("  %s\n", Tf("summary.skipped", results.TotalFailed))
-	fmt.Println()
+	WriteSummary(os.Stdout, cfg, results)
+}
+
+// WriteSummary writes the end-of-run summary to w.
+func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w, centerInBox(T("summary.title")))
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
+	fmt.Fprintf(w, "  %s\n", Tf("summary.skipped", results.TotalFailed))
+	if results.Aborted {
+		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, T("summary.aborted"), RST)
+	}
+	fmt.Fprintln(w)
 
 	// Summary labels are padded to the widest translated label rather than
 	// carrying typed trailing spaces, so the ":" column holds in any language.
@@ -798,7 +837,7 @@ func PrintSummary(cfg *Config, results StepResults) {
 	// line prints one summary row: "  [n] <label> : <value>".
 	line := func(idx int, value string) {
 		name := padRight(T(fmt.Sprintf("step.%d.short", idx)), nameW)
-		fmt.Printf("  %-5s%s : %s\n", fmt.Sprintf("[%d]", idx), name, value)
+		fmt.Fprintf(w, "  %-5s%s : %s\n", fmt.Sprintf("[%d]", idx), name, value)
 	}
 	dim := func(s string) string { return CYAN + s + RST }
 
@@ -823,6 +862,10 @@ func PrintSummary(cfg *Config, results StepResults) {
 	for _, s := range steps {
 		if s.cfg != 1 {
 			line(s.idx, dim(T("common.skipped")))
+			continue
+		}
+		if results.NotRun[s.idx] {
+			line(s.idx, dim(T("common.not_run")))
 			continue
 		}
 
@@ -855,7 +898,7 @@ func PrintSummary(cfg *Config, results StepResults) {
 				if r.Trimmed > 0 || r.TrimSkipped > 0 {
 					detail = Tf("summary.procs", detail, r.Trimmed, r.TrimSkipped)
 				}
-				fmt.Printf("       %s%s%s\n", CYAN, Tf("summary.ran", detail), RST)
+				fmt.Fprintf(w, "       %s%s%s\n", CYAN, Tf("summary.ran", detail), RST)
 			}
 
 		case s.idx == 11:
@@ -876,6 +919,9 @@ func PrintSummary(cfg *Config, results StepResults) {
 	deepTag := fmt.Sprintf("%s - %s%s%s%s", T("step.12.short"), RED, T("step.12.tag"), RST,
 		strings.Repeat(" ", max(0, nameW-len([]rune(deepPlain)))))
 	deepState := dim(T("common.skipped"))
+	if results.NotRun[12] {
+		deepState = dim(T("common.not_run"))
+	}
 	if results.DeepCleanupRan {
 		if results.DeepCleanupFailed {
 			deepState = dim(T("summary.partial"))
@@ -883,14 +929,20 @@ func PrintSummary(cfg *Config, results StepResults) {
 			deepState = RED + T("summary.completed") + RST
 		}
 	}
-	fmt.Printf("  %-5s%s : %s\n", "[12]", deepTag, deepState)
+	fmt.Fprintf(w, "  %-5s%s : %s\n", "[12]", deepTag, deepState)
 
-	fmt.Println()
-	fmt.Println("+---------------------------------------+")
-	fmt.Printf("  %s\n", T("summary.all_done"))
-	fmt.Println("+---------------------------------------+")
-	fmt.Println()
-	fmt.Printf("  %s\n", VersionLine())
-	fmt.Printf("  %s%s%s\n", CYAN, Repo, RST)
-	fmt.Println()
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintf(w, "  %s\n", T("summary.all_done"))
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w)
+	if results.LogPath != "" {
+		fmt.Fprintf(w, "  %s\n", Tf("summary.log_saved", results.LogPath))
+	}
+	if results.LogErr != "" {
+		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, Tf("summary.log_fail", results.LogErr), RST)
+	}
+	fmt.Fprintf(w, "  %s\n", VersionLine())
+	fmt.Fprintf(w, "  %s%s%s\n", CYAN, Repo, RST)
+	fmt.Fprintln(w)
 }

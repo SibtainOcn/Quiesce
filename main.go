@@ -28,6 +28,8 @@ func main() {
 	// so the user can read the error instead of the window vanishing.
 	defer func() {
 		if r := recover(); r != nil {
+			// Show the cursor again: the live screen hides it while drawing.
+			fmt.Print("\x1b[?25h")
 			fmt.Printf("\n\x1b[31m[FATAL]\x1b[0m %s\n", Tf("common.fatal", r))
 			fmt.Print(T("common.press_enter"))
 			bufio.NewReader(os.Stdin).ReadString('\n')
@@ -75,6 +77,10 @@ func main() {
 	// path. The version is included so a screenshot always says which build
 	// it came from.
 	SetConsoleTitle(AppName + " v" + Version)
+
+	// From here on Ctrl+C and closing the window restore any stopped
+	// service and the console before exiting.
+	InstallShutdownHandler()
 
 	// Load configuration
 	cfg, err := LoadConfig(configFilePath)

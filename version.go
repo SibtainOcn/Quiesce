@@ -53,14 +53,14 @@ const (
 
 // Version and Commit are overridable at build time:
 //
-//	go build -ldflags "-X main.Version=2.4.0" -o qc.exe
+//	go build -ldflags "-X main.Version=2.5.0" -o qc.exe
 //
 // Version carries a real default so an unflagged `go build` still produces a
 // correctly-labelled binary rather than "dev". Build timestamps are
 // deliberately not recorded or shown - they add noise to every version check
 // and make otherwise identical builds look different.
 var (
-	Version = "2.4.0"
+	Version = "2.5.0"
 	Commit  = ""
 )
 
@@ -90,7 +90,7 @@ func init() {
 }
 
 // VersionLine is the single-line identity shown in the menu banner, e.g.
-// "SibtainOcn ~ Quiesce v2.4.0".
+// "SibtainOcn ~ Quiesce v2.5.0".
 func VersionLine() string {
 	return fmt.Sprintf("%s ~ %s v%s", Author, AppName, Version)
 }

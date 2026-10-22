@@ -91,9 +91,13 @@ func init() {
 // T returns the translated string for key. go-i18n resolves the active
 // language first and English second; if the key exists in neither, the key
 // itself is returned so a typo is visible on screen rather than silent.
+//
+// When the active language lacks a key, go-i18n returns the English text
+// AND a MessageNotFoundErr, so the text is used whenever there is one - the
+// error alone must not discard a valid fallback.
 func T(key string) string {
-	s, err := localizer.Localize(&i18n.LocalizeConfig{MessageID: key})
-	if err != nil || s == "" {
+	s, _ := localizer.Localize(&i18n.LocalizeConfig{MessageID: key})
+	if s == "" {
 		return key
 	}
 	return s
@@ -237,7 +241,7 @@ func readLanguageOverride(configPath string) string {
 // than w are returned unchanged rather than truncated - a clipped label is
 // worse than a nudged column.
 func padRight(s string, w int) string {
-	if n := w - len([]rune(s)); n > 0 {
+	if n := w - textWidth(s); n > 0 {
 		return s + strings.Repeat(" ", n)
 	}
 	return s

@@ -7,6 +7,7 @@ package main
 // compiler and only show up as a crooked column on someone else's machine.
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"regexp"
@@ -68,7 +69,7 @@ func sampleResults() StepResults {
 	return StepResults{
 		TotalDeleted: 1234,
 		TotalFailed:  7,
-		StepCounts:   [12]int64{0, 400, 300, 120, 30, 90, 200, 80, 14, 0, 0, 0},
+		StepCounts:   [13]int64{0, 400, 300, 120, 30, 90, 200, 80, 14, 0, 0, 0, 0},
 		Ram: RamResult{
 			FreedMB:   2048,
 			BeforePct: 78.4,
@@ -169,8 +170,9 @@ func TestNoRawKeysOnScreen(t *testing.T) {
 			DrawMainMenu(cfg, "Microsoft Windows ", "Version 10.0.0", "PC", "user")
 			PrintSummary(cfg, results)
 			for i := 1; i <= 12; i++ {
-				StepSkipped(i)
+				fmt.Println(stepHeaderText(i))
 			}
+			fmt.Println(stripANSI(sampleLiveFrame(t, 100, 24)))
 			PrintHelp()
 		})
 

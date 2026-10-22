@@ -78,12 +78,30 @@ Launch **`qc.exe`** as Administrator:
   ENTER    Run cleaner with current settings
   F        Open settings menu
 
+While Cleaning:
+  P        Pause / resume
+  Q        Abort (stops safely, restarts any stopped services)
+  Ctrl+C   Same as Q
+
 Settings Controls:
   W / S    Move selection Up / Down
   D / A    Toggle step ON / OFF
   L        Choose language
   E        Save & return to main menu
 ```
+
+Pick how progress is shown with **Output style** in settings:
+
+- **Minimal** (default): a checklist of steps that ticks over with each step's
+  file count and time, plus the file being removed right now.
+- **Verbose**: every removed file is listed, with a status line pinned at the
+  bottom (step, progress, files, space freed, time, live CPU/RAM and the
+  pause/abort keys).
+
+To keep the full list of what was removed, switch on **Save a log file of each
+run**: each run is written to a `logs` folder next to `qc.exe` (off by
+default). Closing the window mid-run still restarts any Windows service that
+was stopped for cleaning.
 
 ---
 
@@ -115,7 +133,7 @@ The commit hash and build time are stamped in automatically from git. To set an
 explicit version string:
 
 ```bash
-go build -ldflags "-X main.Version=2.4.0" -o qc.exe
+go build -trimpath -ldflags "-s -w -X main.Version=2.5.0" -o qc.exe
 ```
 
 ---

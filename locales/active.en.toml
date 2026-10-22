@@ -99,14 +99,16 @@
 "common.off" = "OFF"
 "common.done" = "Done!"
 "common.skipped" = "SKIPPED"
+"common.not_run" = "not run"
 "common.press_enter" = "Press ENTER to exit..."
 "common.config_made" = "Config created: %s"
 "common.config_warn" = "Warning loading config: %v"
 "common.fatal" = "Unexpected error: %v"
 
 # --- Cleaner run output ---
-"cleaner.crashed" = "Cleaning pipeline crashed: %v"
-"cleaner.partial" = "Partial results will be shown."
+"cleaner.crashed" = "This step crashed and was stopped: %v"
+"cleaner.read_fail" = "Could not read %s: %v"
+"cleaner.cleanmgr_left" = "Stopped waiting - cleanmgr.exe keeps running in the background"
 "cleaner.dns_ok" = "DNS cache flushed"
 "cleaner.dns_fail" = "[SKIP] Could not flush DNS"
 "cleaner.bin_freed" = "Recycle Bin emptied - %s freed"
@@ -179,6 +181,36 @@
 "summary.partial" = "partial/failed"
 "summary.completed" = "completed"
 "summary.all_done" = "ALL DONE - Performance Boost Complete!"
+"summary.aborted" = "Run aborted - the remaining steps were not run"
+"summary.log_saved" = "Log saved: %s"
+"summary.log_fail" = "Could not write the log file: %v"
+
+# --- Live progress screen (shown while a run is in progress) ---
+"live.title_clean" = "Cleaning"
+"live.steps" = "%d of %d steps"
+"live.files" = "%d files"
+"live.skipped" = "skipped"
+"live.paused" = "PAUSED"
+"live.aborting" = "ABORTING"
+"live.aborted" = "ABORTED"
+"live.done" = "DONE"
+"live.keys_run" = "[P] pause  [Q] abort"
+"live.keys_paused" = "[P] resume  [Q] abort"
+"live.keys_stopping" = "Stopping safely..."
+"live.closed_log" = "Window closed - run stopped, services restarted"
+"live.paused_log" = "Paused - press P to resume"
+"live.resumed" = "Resumed"
+"live.abort_req" = "Abort requested - finishing the current item, then restarting any stopped services"
+
+# --- Optional settings ---
+"opt.keep_log" = "Save a log file of each run"
+"opt.output_style" = "Output style"
+"opt.verbose" = "VERBOSE"
+"opt.minimal" = "MINIMAL"
+
+# --- Run log file (plain text, written only when the option is ON) ---
+"log.header" = "%s v%s - run started %s"
+"log.footer" = "Finished in %s - %d items, %s freed"
 
 # --- Elevation ---
 "priv.requesting" = "Requesting administrator privileges..."

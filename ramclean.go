@@ -360,7 +360,7 @@ func GetSystemStats() SystemStats {
 // cfg, in the order that makes each one count: working sets are trimmed and
 // dirty pages flushed FIRST so those pages land on the standby list, and the
 // standby purge runs LAST so it sweeps everything the earlier steps produced.
-func RunRamCleaner(cfg *Config) RamResult {
+func RunRamCleaner(cfg *Config, tc *TaskCtx) RamResult {
 	before := GetMemoryStats()
 	result := RamResult{BeforePct: before.UsedPercent, AfterPct: before.UsedPercent}
 
@@ -383,9 +383,9 @@ func RunRamCleaner(cfg *Config) RamResult {
 				result.Trimmed = trimmed
 				result.TrimSkipped = skipped
 				if trimmed > 0 {
-					fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.trimmed", trimmed, skipped))
+					tc.Log(LogGood, "    "+Tf("ram.trimmed", trimmed, skipped))
 				} else {
-					fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.trim_none", skipped))
+					tc.Log(LogBad, "    "+Tf("ram.trim_none", skipped))
 				}
 			},
 		})
@@ -400,9 +400,9 @@ func RunRamCleaner(cfg *Config) RamResult {
 				res := FlushModifiedList()
 				status := FormatNTSTATUS(res)
 				if res == 0 {
-					fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.flushed", status))
+					tc.Log(LogGood, "    "+Tf("ram.flushed", status))
 				} else {
-					fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.flush_fail", status))
+					tc.Log(LogBad, "    "+Tf("ram.flush_fail", status))
 				}
 			},
 		})
@@ -415,9 +415,9 @@ func RunRamCleaner(cfg *Config) RamResult {
 			T("ram.cache.note"),
 			func() {
 				if PurgeSystemFileCache() {
-					fmt.Printf("    \x1b[31m%s\x1b[0m\n", T("ram.cache_ok"))
+					tc.Log(LogGood, "    "+T("ram.cache_ok"))
 				} else {
-					fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.cache_fail"))
+					tc.Log(LogBad, "    "+T("ram.cache_fail"))
 				}
 			},
 		})
@@ -432,17 +432,17 @@ func RunRamCleaner(cfg *Config) RamResult {
 				res := PurgeStandbyList()
 				status := FormatNTSTATUS(res)
 				if res == 0 {
-					fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.standby_ok", status))
+					tc.Log(LogGood, "    "+Tf("ram.standby_ok", status))
 				} else {
-					fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.standby_fail", status))
+					tc.Log(LogBad, "    "+Tf("ram.standby_fail", status))
 				}
 			},
 		})
 	}
 
 	if len(steps) == 0 {
-		fmt.Println()
-		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.nothing"))
+		tc.Log(LogPlain, "")
+		tc.Log(LogBad, "    "+T("ram.nothing"))
 		result.NothingToRun = true
 		return result
 	}
@@ -450,20 +450,20 @@ func RunRamCleaner(cfg *Config) RamResult {
 	total := len(steps) + 1
 
 	// --- Step 1: Enable privilege ---
-	fmt.Println()
-	fmt.Printf("  \x1b[36m%s\x1b[0m\n", Tf("ram.priv_step", total))
+	tc.Log(LogPlain, "")
+	tc.Log(LogInfo, "  "+Tf("ram.priv_step", total))
 	if EnablePrivilege() {
-		fmt.Printf("    \x1b[31m%s\x1b[0m\n", T("ram.priv_ok"))
+		tc.Log(LogGood, "    "+T("ram.priv_ok"))
 	} else {
-		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.priv_fail"))
+		tc.Log(LogBad, "    "+T("ram.priv_fail"))
 		result.PrivFailed = true
 		return result
 	}
 
 	for i, s := range steps {
-		fmt.Println()
-		fmt.Printf("  \x1b[36m%s\x1b[0m\n", Tf("ram.step", i+2, total, s.title))
-		fmt.Printf("    %s\n", s.note)
+		tc.Log(LogPlain, "")
+		tc.Log(LogInfo, "  "+Tf("ram.step", i+2, total, s.title))
+		tc.Log(LogPlain, "    "+s.note)
 		s.run()
 	}
 
@@ -484,21 +484,21 @@ func RunRamCleaner(cfg *Config) RamResult {
 	result.AfterPct = after.UsedPercent
 	result.DropPct = dropPct
 
-	fmt.Println()
-	fmt.Println("  +---------------------------------------+")
-	fmt.Printf("  \x1b[36m%s\x1b[0m\n", centerInBox(T("ram.results_title")))
-	fmt.Println("  +---------------------------------------+")
+	tc.Log(LogPlain, "")
+	tc.Log(LogPlain, "  +---------------------------------------+")
+	tc.Log(LogInfo, "  "+centerInBox(T("ram.results_title")))
+	tc.Log(LogPlain, "  +---------------------------------------+")
 
 	if freedMB > 0 {
-		fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.freed", freedMB))
-		fmt.Printf("    \x1b[31m%s\x1b[0m\n", Tf("ram.drop", dropPct, before.UsedPercent, after.UsedPercent))
-		fmt.Printf("    \x1b[31m%s\x1b[0m\n", T("ram.status_ok"))
+		tc.Log(LogGood, "    "+Tf("ram.freed", freedMB))
+		tc.Log(LogGood, "    "+Tf("ram.drop", dropPct, before.UsedPercent, after.UsedPercent))
+		tc.Log(LogGood, "    "+T("ram.status_ok"))
 	} else if freedMB == 0 {
-		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.freed_zero"))
-		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.status_zero"))
+		tc.Log(LogBad, "    "+T("ram.freed_zero"))
+		tc.Log(LogBad, "    "+T("ram.status_zero"))
 	} else {
-		fmt.Printf("    \x1b[33m%s\x1b[0m\n", Tf("ram.change", freedMB))
-		fmt.Printf("    \x1b[33m%s\x1b[0m\n", T("ram.status_neg"))
+		tc.Log(LogBad, "    "+Tf("ram.change", freedMB))
+		tc.Log(LogBad, "    "+T("ram.status_neg"))
 	}
 
 	// No CPU/Memory box here on purpose: the same numbers are already in the

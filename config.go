@@ -48,6 +48,14 @@ type Config struct {
 	RamFileCache       int // flush the kernel/system file cache working set
 	RamTrimWorkingSets int // page out every process's working set (aggressive)
 
+	// KeepLog writes a plain-text log of each run to a "logs" folder next to
+	// qc.exe. Off by default: the live screen only keeps recent lines, so
+	// this is for people who want the full list of what was removed.
+	KeepLog int
+
+	// OutputStyle: 0 = verbose file log, 1 = minimal checklist (default).
+	OutputStyle int
+
 	// Language is the optional UI language override ("en", "es", ...). Empty
 	// means follow the Windows display language.
 	//
@@ -76,6 +84,8 @@ func DefaultConfig() *Config {
 		RamPurgeStandby:    1,
 		RamFileCache:       0, // opt-in: drops kernel file cache
 		RamTrimWorkingSets: 0, // opt-in: aggressive, causes hard faults afterwards
+
+		OutputStyle: int(StyleMinimal),
 	}
 }
 
@@ -166,6 +176,10 @@ func LoadConfig(filePath string) (*Config, error) {
 			cfg.RamFileCache = val
 		case "RAM_TRIM_WORKING_SETS":
 			cfg.RamTrimWorkingSets = val
+		case "KEEP_LOG":
+			cfg.KeepLog = val
+		case "OUTPUT_STYLE":
+			cfg.OutputStyle = val
 		}
 	}
 
@@ -174,7 +188,7 @@ func LoadConfig(filePath string) (*Config, error) {
 
 func SaveConfig(filePath string, cfg *Config) error {
 	content := fmt.Sprintf(
-		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\n",
+		"WIN_TEMP=%d\nUSER_TEMP=%d\nPREFETCH=%d\nERROR_REPORTS=%d\nDELIVERY_OPT=%d\nWIN_UPDATE=%d\nLOG_FILES=%d\nINSTALLER_TEMP=%d\nDNS_FLUSH=%d\nRAM_OPTIMIZE=%d\nRECYCLE_BIN=%d\nRAM_FLUSH_MODIFIED=%d\nRAM_PURGE_STANDBY=%d\nRAM_FILE_CACHE=%d\nRAM_TRIM_WORKING_SETS=%d\nKEEP_LOG=%d\nOUTPUT_STYLE=%d\n",
 		cfg.WinTemp,
 		cfg.UserTemp,
 		cfg.Prefetch,
@@ -190,6 +204,8 @@ func SaveConfig(filePath string, cfg *Config) error {
 		cfg.RamPurgeStandby,
 		cfg.RamFileCache,
 		cfg.RamTrimWorkingSets,
+		cfg.KeepLog,
+		cfg.OutputStyle,
 	)
 
 	// Preserve an explicit language override across saves. It is only written
@@ -236,6 +252,10 @@ func (c *Config) GetVal(index int) int {
 		return c.RamFileCache
 	case 104:
 		return c.RamTrimWorkingSets
+	case keepLogIndex:
+		return c.KeepLog
+	case outputStyleIndex:
+		return c.OutputStyle
 	default:
 		return 0
 	}
@@ -273,5 +293,9 @@ func (c *Config) SetVal(index int, val int) {
 		c.RamFileCache = val
 	case 104:
 		c.RamTrimWorkingSets = val
+	case keepLogIndex:
+		c.KeepLog = val
+	case outputStyleIndex:
+		c.OutputStyle = val
 	}
 }
