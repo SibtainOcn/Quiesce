@@ -5,12 +5,6 @@ All notable changes to Quiesce are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-
-- `qc uninstall` removes Quiesce, its settings, logs and PATH entry. `-y` skips the question.
-
 ## [2.5.1] - 2026-10-22
 
 ### Added
@@ -18,6 +12,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Direct run commands that skip the menu, e.g. `qc temp-1`, `qc ram`, `qc bin`, `qc deep`. Every step has one: `temp` (both temp folders), `temp-1`, `temp-2`, `prefetch`, `errors`, `delivery`, `win-update` (or `wu`), `logs`, `installer`, `dns`, `ram` (all 4 sub-options), `ram-1` to `ram-4`, `bin`, `deep`.
 - `qc all` runs every step that is ON in the saved settings.
 - Commands chain: `qc temp-1 deep bin` runs just those steps, in menu order.
+- `qc uninstall` removes Quiesce, its settings, logs and PATH entry. `-y` skips the question.
 - `qc --help` lists every command.
 - From a normal terminal, a direct command asks for admin (UAC) and then runs in that same terminal, with no second window. P, Q and Ctrl+C still work. If it can't share the terminal, it opens its own window as before.
 - Direct runs list only the chosen steps, both while running and in the summary, numbered 1, 2, 3... The item totals show only when a folder-cleaning step ran.
