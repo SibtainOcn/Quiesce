@@ -23,6 +23,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `qc env` adds the folder holding `qc.exe` to the user PATH (no admin needed), or says it is already there; new terminals pick it up at once. First run offers it too, with example commands. A temporary folder is refused, and another `qc.exe` earlier on PATH is pointed out.
 - `qc repo` (or `qc github`) opens the Quiesce GitHub page in the default browser.
 - `qc --help` is grouped into cleaning commands, tools and examples.
+- README rewritten short and plain. The full guide moved to `docs/USAGE.md`, and building and releasing to `docs/DEVELOPING.md`.
 - Updates use the proxy set in Windows' Internet Options when `HTTPS_PROXY` is not set.
 - First run asks whether to turn the update check on (`Y` by default). Change it later with **Auto update check** in settings (`AUTO_UPDATE` in `cleaner_config.dat`).
 
