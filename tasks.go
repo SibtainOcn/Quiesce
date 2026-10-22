@@ -22,10 +22,6 @@ package main
 // file and crash isolation. Cleaning is one such list (cleaner.go); browser
 // or app cache cleaning and the telemetry scan can be others.
 
-import (
-	"time"
-)
-
 // Task is one job in a run.
 type Task struct {
 	Name    string // short label: checklist and status line
@@ -45,9 +41,7 @@ type TaskOutcome struct {
 type RunReport struct {
 	Ran     []bool // per task: whether it started
 	Aborted bool
-	Items   int64
 	Bytes   int64
-	Elapsed time.Duration
 	LogPath string // empty when no log file was kept
 	LogErr  error
 }
@@ -80,12 +74,12 @@ func (tc *TaskCtx) SetTotal(n int) { tc.v.SetTotal(n) }
 // even if fn panics, the run is aborted, or the window is closed (the
 // shutdown handler restarts every service still marked stopped).
 func (tc *TaskCtx) WithService(name string, fn func()) {
-	stopService(name)
 	markServiceStopped(name)
 	defer func() {
 		startService(name)
 		markServiceRestarted(name)
 	}()
+	stopService(name)
 	fn()
 }
 
@@ -107,7 +101,7 @@ func RunTasks(tasks []Task, opts RunOptions) (rep RunReport) {
 	defer func() {
 		v.Finish()
 		rep.Aborted = v.Aborted()
-		rep.Items, rep.Bytes, rep.Elapsed = v.Totals()
+		_, rep.Bytes, _ = v.Totals()
 		rep.LogPath, rep.LogErr = v.Close()
 	}()
 
@@ -124,6 +118,9 @@ func RunTasks(tasks []Task, opts RunOptions) (rep RunReport) {
 		v.BeginTask(i, t.Title, t.Alert)
 		rep.Ran[i] = true
 		out := runTaskSafely(t, tc)
+		if v.Aborted() {
+			out = TaskOutcome{Detail: T("summary.partial"), Warn: true}
+		}
 		v.EndTask(i, out.Detail, out.Warn)
 	}
 	return rep

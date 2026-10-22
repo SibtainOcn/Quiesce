@@ -89,6 +89,15 @@ func (tc *TaskCtx) CleanTree(dir string) (deleted, failed int64) {
 	}
 	var files []item
 
+	// Only clean a real folder: if the root is a link or junction, walking
+	// it would treat the link itself as a file and remove it.
+	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
+		if err != nil && !os.IsNotExist(err) {
+			tc.Log(LogWarn, Tf("cleaner.read_fail", dir, err))
+		}
+		return 0, 0
+	}
+
 	err := filepath.WalkDir(dir, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
 			if p == dir {

@@ -74,7 +74,8 @@ func InstallShutdownHandler() {
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		for s := range ch {
-			if v := activeView.Load(); v != nil && s == os.Interrupt && !v.isFinished() {
+			// A second Ctrl+C force-quits a run that is stuck stopping.
+			if v := activeView.Load(); v != nil && s == os.Interrupt && !v.isFinished() && !v.Aborted() {
 				v.Abort()
 				continue
 			}
@@ -87,9 +88,9 @@ func emergencyExit() {
 	restartStoppedServices()
 	if v := activeView.Load(); v != nil {
 		v.emergencyClose()
+	} else {
+		fmt.Print("\x1b[r\x1b[?25h")
 	}
-	// Undo the live view's console changes: scroll region and hidden cursor.
-	fmt.Print("\x1b[r\x1b[?25h")
 	RestoreConsoleMode()
 	os.Exit(1)
 }

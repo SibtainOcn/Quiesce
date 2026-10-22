@@ -162,11 +162,14 @@ var (
 	}
 )
 
-// pickGlyphs chooses fancy symbols for Windows Terminal (and other modern
-// hosts, which run behind a pseudo console) and for a classic console set to
-// a Cascadia font; plain ones otherwise.
+// pickGlyphs chooses the braille spinner and check marks on Windows 11 and in
+// modern terminals, and plain symbols only for Windows 10's classic console
+// without a Cascadia font, which would draw empty boxes.
 func pickGlyphs() glyphSet {
 	if os.Getenv("WT_SESSION") != "" || os.Getenv("TERM_PROGRAM") != "" {
+		return fancyGlyphs
+	}
+	if windows.RtlGetVersion().BuildNumber >= 22000 {
 		return fancyGlyphs
 	}
 	switch consoleWindowClass() {
@@ -198,6 +201,7 @@ type LiveView struct {
 	pausedAt  time.Time
 	pausedFor time.Duration
 	finished  bool
+	current   string // item the running task last reported, for minimal
 	lastW     int
 	lastH     int
 	runLog    *runLog
@@ -315,8 +319,9 @@ func pickMode(style OutputStyle, tasks int) viewMode {
 	return modePlain
 }
 
-// minimalRows is the height of the minimal checklist block.
-func minimalRows(tasks int) int { return tasks + 6 }
+// minimalRows is the height of the minimal checklist block, including the
+// live ">> file" row under the running task.
+func minimalRows(tasks int) int { return tasks + 7 }
 
 func (v *LiveView) labelFor(i int) string {
 	return fmt.Sprintf("[%d/%d] %s", i+1, len(v.tasks), v.tasks[i].name)
@@ -333,6 +338,7 @@ func (v *LiveView) BeginTask(i int, title string, alert bool) {
 	v.tasks[i].state = taskRunning
 	v.tasks[i].started = time.Now()
 	v.tasks[i].pauseBase = v.pausedFor
+	v.current = ""
 	v.mu.Unlock()
 
 	v.Log(LogPlain, "")
@@ -409,6 +415,9 @@ func (v *LiveView) Log(kind LogKind, text string) {
 	defer v.mu.Unlock()
 
 	v.runLog.line(stripANSI(line))
+	if kind == LogOK {
+		v.current = text
+	}
 	if v.mode == modeMinimal || v.finished && v.mode != modePlain {
 		return
 	}
@@ -560,6 +569,8 @@ func (v *LiveView) Close() (logPath string, logErr error) {
 		v.mu.Unlock()
 		activeView.CompareAndSwap(v, nil)
 	})
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	return v.logPath, v.logErr
 }
 
@@ -568,6 +579,9 @@ func (v *LiveView) Close() (logPath string, logErr error) {
 func (v *LiveView) emergencyClose() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	// Under mu and with finished set, no later render can redo these.
+	v.finished = true
+	_, _ = os.Stdout.WriteString("\x1b[r\x1b[?25h")
 	v.runLog.line(T("live.closed_log"))
 	v.closeLogLocked()
 }
@@ -668,7 +682,8 @@ func (v *LiveView) keyLoop() {
 
 func (v *LiveView) render() {
 	w, h, ok := consoleSize()
-	if !ok || w < minCols {
+	if !ok || w < minCols || h < pinnedRows+5 ||
+		(v.mode == modeMinimal && h <= minimalRows(len(v.tasks))) {
 		return
 	}
 	v.mu.Lock()
@@ -703,7 +718,7 @@ func (v *LiveView) drawLocked(b *strings.Builder, w, h int, now time.Time) {
 		b.WriteString("\x1b7") // save the log's cursor position
 		fmt.Fprintf(b, "\x1b[%d;1H%s%s%s\x1b[K", top, DIM, strings.Repeat("─", cols), RST)
 		fmt.Fprintf(b, "\x1b[%d;1H%s\x1b[K", top+1, clipANSI(v.statusLocked(cols, now), cols))
-		fmt.Fprintf(b, "\x1b[%d;1H%s\x1b[K", top+2, clipANSI(v.footerLocked(cols), cols))
+		fmt.Fprintf(b, "\x1b[%d;1H%s\x1b[K", top+2, clipANSI(v.footerLocked(), cols))
 		b.WriteString("\x1b8")
 	case modeMinimal:
 		for i, row := range v.checklistLocked(cols, now) {
@@ -720,8 +735,20 @@ func (v *LiveView) checklistLocked(cols int, now time.Time) []string {
 		head += WHITE + v.title + RST + "  "
 	}
 	rows = append(rows, "", head+DIM+Tf("live.steps", v.startedEnabledLocked(), v.enabled)+RST, "")
+	live := false
 	for i := range v.tasks {
 		rows = append(rows, v.taskRowLocked(i, now))
+		if v.tasks[i].state == taskRunning && !v.finished {
+			cur := v.current
+			if cur == "" {
+				cur = "..."
+			}
+			rows = append(rows, "     "+DIM+">> "+cur+RST)
+			live = true
+		}
+	}
+	if !live {
+		rows = append(rows, "") // keep the block height constant
 	}
 
 	p := v.progressLocked()
@@ -733,7 +760,7 @@ func (v *LiveView) checklistLocked(cols int, now time.Time) []string {
 	if tag := v.tagLocked(); tag != "" {
 		line += "  " + tag
 	}
-	rows = append(rows, "", line, "  "+v.footerLocked(cols-2))
+	rows = append(rows, "", line, "  "+v.footerLocked())
 	return rows
 }
 
@@ -869,7 +896,7 @@ func (v *LiveView) statusLocked(cols int, now time.Time) string {
 	return line
 }
 
-func (v *LiveView) footerLocked(cols int) string {
+func (v *LiveView) footerLocked() string {
 	s := v.stats
 	left := DIM + fmt.Sprintf("%s %d%%  ·  %s %.2f/%.2f GB %d%%",
 		T("menu.cpu"), s.CpuLoad, T("menu.memory"), s.UsedGB, s.TotalGB, s.Pct) + RST
@@ -884,11 +911,10 @@ func (v *LiveView) footerLocked(cols int) string {
 	default:
 		keys = T("live.keys_run")
 	}
-	gap := cols - visibleWidth(left) - textWidth(keys)
-	if keys == "" || gap < 2 {
+	if keys == "" {
 		return left
 	}
-	return left + strings.Repeat(" ", gap) + WHITE + keys + RST
+	return left + DIM + "  ·  " + keys + RST
 }
 
 // renderLogLine colors a log line for the screen.

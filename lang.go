@@ -241,7 +241,7 @@ func readLanguageOverride(configPath string) string {
 // than w are returned unchanged rather than truncated - a clipped label is
 // worse than a nudged column.
 func padRight(s string, w int) string {
-	if n := w - len([]rune(s)); n > 0 {
+	if n := w - textWidth(s); n > 0 {
 		return s + strings.Repeat(" ", n)
 	}
 	return s

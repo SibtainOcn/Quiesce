@@ -143,8 +143,11 @@ func TestMinimalChecklist(t *testing.T) {
 			t.Errorf("checklist has no %q", want)
 		}
 	}
-	if strings.Contains(frame, "very_long_file_name") {
-		t.Error("minimal style shows file names")
+	if n := strings.Count(frame, ">> very_long_file_name"); n != 1 {
+		t.Errorf("minimal shows the current file %d times, want once under the running step", n)
+	}
+	if got := len(drawnRows(drawn(v, 120, 30))); got != minimalRows(len(v.tasks)) {
+		t.Errorf("minimal drew %d rows, want %d", got, minimalRows(len(v.tasks)))
 	}
 }
 

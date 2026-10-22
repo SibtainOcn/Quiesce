@@ -293,9 +293,10 @@ func runDeepCleanup(tc *TaskCtx, results *StepResults) TaskOutcome {
 	}
 
 	tc.Log(LogPlain, "  "+T("cleaner.cleanmgr_wait"))
-	deadline := time.Now().Add(cleanmgrTimeout)
+	// Counts only time spent waiting, so a pause doesn't eat the timeout.
+	waited := time.Duration(0)
 	for cleanmgrRunning() {
-		if time.Now().After(deadline) {
+		if waited >= cleanmgrTimeout {
 			tc.Log(LogWarn, T("cleaner.cleanmgr_time"))
 			return partial()
 		}
@@ -306,6 +307,7 @@ func runDeepCleanup(tc *TaskCtx, results *StepResults) TaskOutcome {
 				return partial()
 			}
 			time.Sleep(200 * time.Millisecond)
+			waited += 200 * time.Millisecond
 		}
 	}
 	tc.Log(LogOK, T("cleaner.cleanmgr_ok"))
