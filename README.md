@@ -163,8 +163,30 @@ shows `Update available ... run qc -u` at the top of the menu. It never
 installs anything on its own. Toggle it with **Auto update check** in
 settings, or `AUTO_UPDATE=0` / `1` in `cleaner_config.dat`.
 
-For maintainers: each release needs a `qc.exe` asset (64-bit) and, for 32-bit
-users, a `qc-386.exe` asset. GitHub records their SHA-256 automatically.
+No internet, a dropped Wi-Fi link or a slow GitHub each give a plain message
+and leave your copy untouched; the daily check just tries again later.
+GitHub's API allows 60 requests an hour per network, which shared networks
+can use up. The daily check doesn't use the API at all, and `qc -u` falls back
+to the release page and its `SHA256SUMS.txt` when the API refuses. Nothing is
+installed without a checksum match.
+
+### Publishing a release
+
+Releases are built by GitHub Actions ([release.yml](.github/workflows/release.yml))
+when a version tag is pushed:
+
+1. Set `Version` in `version.go` and add a `## [x.y.z]` section to `CHANGELOG.md`.
+2. Commit, then tag and push:
+
+```bash
+git tag v2.6.0
+git push origin v2.6.0
+```
+
+The workflow tests the code, builds `qc-64bit.exe` and `qc-32bit.exe` with the
+version stamped in, checks that the exe runs, and publishes them with
+`SHA256SUMS.txt` and the CHANGELOG section as release notes. A tag such as
+`v2.6.0-rc1` becomes a pre-release, which `qc -u` skips.
 
 ---
 
@@ -208,9 +230,13 @@ go build -trimpath -ldflags "-s -w -X main.Version=2.5.0" -o qc.exe
 
 ### Download
 
-**[⬇ Download qc.exe](https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc.exe)** — always the latest release.
+From the [latest release](https://github.com/SibtainOcn/Quiesce/releases/latest):
 
-Put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`) to run `qc` from any terminal.
+- **`qc-64bit.exe`** - almost every Windows PC
+- **`qc-32bit.exe`** - 32-bit Windows only
+
+Save it as `qc.exe` and put it anywhere on your `PATH` (e.g. `C:\Users\<you>\bin`)
+to run `qc` from any terminal. Later updates keep that name.
 
 ---
 

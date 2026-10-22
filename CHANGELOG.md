@@ -17,6 +17,9 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Direct runs list only the chosen steps, both while running and in the summary, numbered 1, 2, 3... The item totals show only when a folder-cleaning step ran.
 - Self-update: `qc -u` (or `qc update`) downloads the latest release, checks it against the SHA-256 GitHub publishes, test-runs it, then swaps it in, rolling back if any step fails. Steps show with the same spinner as cleaning, followed by the release notes. Admin is asked for only when the `qc.exe` folder needs it.
 - Daily update check: at most once a day, in the background, Quiesce checks for a new release and shows `Update available ... run qc -u` at the top of the menu and above direct-run summaries. Nothing installs on its own.
+- Clear messages when updating fails: no internet, timeout, dropped download, GitHub rate limit or outage, blocked secure connection, full disk. Brief GitHub errors are retried, a stalled download stops after 30 seconds, and the current version is always left in place.
+- When GitHub's API rate limit is hit, `qc -u` falls back to the release page and its `SHA256SUMS.txt`; the daily check never uses the API.
+- Releases are built and published by GitHub Actions when a `v*` tag is pushed: tests, `qc-64bit.exe` and `qc-32bit.exe` with the version stamped in, `SHA256SUMS.txt`, and release notes from this file.
 - First run asks whether to turn the update check on (`Y` by default). Change it later with **Auto update check** in settings (`AUTO_UPDATE` in `cleaner_config.dat`).
 
 ### Changed

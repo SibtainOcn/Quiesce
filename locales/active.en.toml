@@ -230,6 +230,15 @@
 "update.bad_hash" = "checksum mismatch, the download was discarded"
 "update.needs_admin" = "Replacing qc.exe in %s needs administrator rights"
 "update.unchanged" = "Your current version was left unchanged."
+"update.err_offline" = "no internet connection - check your network and try again"
+"update.err_timeout" = "the connection timed out - check your network and try again"
+"update.err_dropped" = "the connection dropped during the download - try again"
+"update.err_rate" = "GitHub's request limit was reached - try again in an hour"
+"update.err_notfound" = "no published release was found"
+"update.err_server" = "GitHub is having problems (HTTP %d) - try again later"
+"update.err_http" = "GitHub refused the request (HTTP %d)"
+"update.err_tls" = "secure connection failed - a proxy or antivirus may be blocking GitHub"
+"update.err_disk" = "not enough disk space next to qc.exe"
 
 # --- Run log file (plain text, written only when the option is ON) ---
 "log.header" = "%s v%s - run started %s"

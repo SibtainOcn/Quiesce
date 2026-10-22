@@ -24,11 +24,13 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,18 +39,29 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 const (
-	latestReleaseAPI = "https://api.github.com/repos/SibtainOcn/Quiesce/releases/latest"
+	latestReleaseAPIDefault = "https://api.github.com/repos/SibtainOcn/Quiesce/releases/latest"
 	updateCheckEvery = 24 * time.Hour
 	maxDownloadSize  = 64 << 20
 	createNoWindow   = 0x08000000
 )
 
-var errNoChecksum = errors.New("no checksum")
+// latestReleaseAPI is a var so tests can point it elsewhere.
+var latestReleaseAPI = latestReleaseAPIDefault
+
+var (
+	errStalled = errors.New("download stalled")
+	errShort   = errors.New("download incomplete")
+)
+
+const stallTimeout = 30 * time.Second
 
 type releaseAsset struct {
 	Name   string `json:"name"`
@@ -97,17 +110,223 @@ func newerVersion(latest, current string) bool {
 	return false
 }
 
-// assetName is the release file for this build.
-func assetName() string {
+// assetNames lists the release files for this build, preferred first.
+// Releases up to v2.5.0 shipped the 64-bit build as plain qc.exe.
+func assetNames() []string {
 	if runtime.GOARCH == "386" {
-		return "qc-386.exe"
+		return []string{"qc-32bit.exe"}
 	}
-	return "qc.exe"
+	return []string{"qc-64bit.exe", "qc.exe"}
 }
 
-var httpClient = &http.Client{Timeout: 2 * time.Minute}
+// httpClient has no overall timeout: downloads on slow links can take a
+// while, so stalls are caught per read instead (see stallReader).
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
+	},
+}
 
-func fetchLatestRelease(ctx context.Context) (releaseInfo, error) {
+// statusError is a non-200 reply from GitHub.
+type statusError struct {
+	code      int
+	rateLimit bool
+}
+
+func (e *statusError) Error() string { return fmt.Sprintf("HTTP %d", e.code) }
+
+func checkStatus(resp *http.Response) error {
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	limited := (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) &&
+		(resp.Header.Get("X-RateLimit-Remaining") == "0" || resp.Header.Get("Retry-After") != "")
+	return &statusError{code: resp.StatusCode, rateLimit: limited}
+}
+
+// retryable is true for errors worth another try: timeouts, dropped
+// connections and GitHub server errors. Being offline is not.
+func retryable(err error) bool {
+	var se *statusError
+	if errors.As(err, &se) {
+		return se.code >= 500
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && !dnsErr.IsTimeout {
+		return false
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET)
+}
+
+// friendlyError turns network and HTTP failures into a short, plain reason.
+func friendlyError(err error) string {
+	var se *statusError
+	var dnsErr *net.DNSError
+	var opErr *net.OpError
+	var certErr *tls.CertificateVerificationError
+	switch {
+	case err == nil:
+		return ""
+	case errors.As(err, &se) && se.rateLimit:
+		return T("update.err_rate")
+	case errors.As(err, &se) && se.code == http.StatusNotFound:
+		return T("update.err_notfound")
+	case errors.As(err, &se) && se.code >= 500:
+		return Tf("update.err_server", se.code)
+	case errors.As(err, &se):
+		return Tf("update.err_http", se.code)
+	case errors.Is(err, errStalled), errors.Is(err, context.DeadlineExceeded):
+		return T("update.err_timeout")
+	case errors.As(err, &certErr):
+		return T("update.err_tls")
+	case errors.As(err, &dnsErr), errors.As(err, &opErr) && opErr.Op == "dial":
+		return T("update.err_offline")
+	case errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, syscall.ECONNRESET), errors.Is(err, errShort):
+		return T("update.err_dropped")
+	case errors.Is(err, windows.ERROR_DISK_FULL), errors.Is(err, windows.ERROR_HANDLE_DISK_FULL):
+		return T("update.err_disk")
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return T("update.err_timeout")
+	}
+	return err.Error()
+}
+
+func fetchLatestRelease(ctx context.Context) (rel releaseInfo, err error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return rel, err
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		rel, err = fetchLatestOnce(ctx)
+		if err == nil || !retryable(err) || ctx.Err() != nil {
+			return rel, err
+		}
+	}
+	return rel, err
+}
+
+// isOffline is true when the network itself is unreachable, so trying
+// another GitHub address would not help.
+func isOffline(err error) bool {
+	var dnsErr *net.DNSError
+	var opErr *net.OpError
+	return errors.As(err, &dnsErr) || errors.As(err, &opErr) && opErr.Op == "dial"
+}
+
+// noRedirectClient reports redirects instead of following them.
+var noRedirectClient = &http.Client{
+	Transport:     httpClient.Transport,
+	Timeout:       30 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
+// latestTagViaRedirect reads the newest release tag from where
+// github.com/<repo>/releases/latest redirects to. Web pages are not
+// subject to the API's 60-requests-an-hour limit.
+func latestTagViaRedirect(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, Repo+"/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", AppName+"/"+Version)
+	resp, err := noRedirectClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+	if resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return "", &statusError{code: resp.StatusCode}
+	}
+	_, tag, ok := strings.Cut(resp.Header.Get("Location"), "/releases/tag/")
+	if !ok {
+		return "", &statusError{code: http.StatusNotFound}
+	}
+	if _, ok := parseVersion(tag); !ok {
+		return "", fmt.Errorf("unexpected release tag %q", tag)
+	}
+	return tag, nil
+}
+
+// releaseFromChecksums builds release info for tag from its SHA256SUMS.txt.
+// Without that file the assets carry no digest, and qc -u refuses them.
+func releaseFromChecksums(ctx context.Context, tag string) (releaseInfo, error) {
+	rel := releaseInfo{Tag: tag}
+	base := Repo + "/releases/download/" + tag + "/"
+	for _, n := range assetNames() {
+		rel.Assets = append(rel.Assets, releaseAsset{Name: n, URL: base + n})
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"SHA256SUMS.txt", nil)
+	if err != nil {
+		return rel, err
+	}
+	req.Header.Set("User-Agent", AppName+"/"+Version)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return rel, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return rel, nil
+	}
+	if err := checkStatus(resp); err != nil {
+		return rel, err
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return rel, err
+	}
+	sums := parseChecksums(string(data))
+	for i, a := range rel.Assets {
+		if h, ok := sums[strings.ToLower(a.Name)]; ok {
+			rel.Assets[i].Digest = "sha256:" + h
+		}
+	}
+	return rel, nil
+}
+
+// parseChecksums reads sha256sum output ("<hash>  name" or "<hash> *name").
+func parseChecksums(s string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(strings.ReplaceAll(s, "\r", ""), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		h := strings.ToLower(fields[0])
+		if _, err := hex.DecodeString(h); err != nil || len(h) != 64 {
+			continue
+		}
+		out[strings.ToLower(strings.TrimPrefix(fields[1], "*"))] = h
+	}
+	return out
+}
+
+// latestForUpdate gets the release to install: the API first, then the
+// redirect and checksum file when the API refuses (rate limit, outage).
+func latestForUpdate(ctx context.Context) (releaseInfo, error) {
+	rel, err := fetchLatestRelease(ctx)
+	if err == nil || isOffline(err) || ctx.Err() != nil {
+		return rel, err
+	}
+	tag, rerr := latestTagViaRedirect(ctx)
+	if rerr != nil {
+		return rel, err
+	}
+	return releaseFromChecksums(ctx, tag)
+}
+
+func fetchLatestOnce(ctx context.Context) (releaseInfo, error) {
 	var rel releaseInfo
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestReleaseAPI, nil)
 	if err != nil {
@@ -120,11 +339,11 @@ func fetchLatestRelease(ctx context.Context) (releaseInfo, error) {
 		return rel, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return rel, fmt.Errorf("GitHub returned %s", resp.Status)
+	if err := checkStatus(resp); err != nil {
+		return rel, err
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rel); err != nil {
-		return rel, err
+		return rel, fmt.Errorf("unreadable reply from GitHub: %w", err)
 	}
 	if _, ok := parseVersion(rel.Tag); !ok {
 		return rel, fmt.Errorf("unexpected release tag %q", rel.Tag)
@@ -194,8 +413,11 @@ func StartUpdateCheck(cfg *Config) {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		c.LastCheck = time.Now()
-		if rel, err := fetchLatestRelease(ctx); err == nil {
-			c.Latest = rel.version()
+		if tag, err := latestTagViaRedirect(ctx); err == nil {
+			c.Latest = strings.TrimPrefix(tag, "v")
+		} else {
+			// Offline or failed: try again in about an hour, not a day.
+			c.LastCheck = c.LastCheck.Add(-updateCheckEvery + time.Hour)
 		}
 		writeUpdateCache(c)
 	}()
@@ -256,14 +478,15 @@ func RunSelfUpdate(elevated bool) int {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		var e error
-		rel, e = fetchLatestRelease(ctx)
+		rel, e = latestForUpdate(ctx)
 		if e == nil {
 			set(Tf("update.latest", rel.version(), Version))
 		}
 		return e
 	})
 	if err != nil {
-		printStepFail(Tf("update.net_fail", err))
+		printStepFail(Tf("update.net_fail", friendlyError(err)))
+		fmt.Println()
 		return 1
 	}
 	writeUpdateCache(updateCache{LastCheck: time.Now(), Latest: rel.version()})
@@ -280,7 +503,7 @@ func RunSelfUpdate(elevated bool) int {
 		return 1
 	}
 	wantHash, ok := strings.CutPrefix(strings.ToLower(asset.Digest), "sha256:")
-	if !ok || len(wantHash) != 64 || asset.Size <= 0 || asset.Size > maxDownloadSize {
+	if !ok || len(wantHash) != 64 || asset.Size > maxDownloadSize {
 		printStepFail(Tf("update.no_digest", rel.version(), Repo+"/releases"))
 		return 1
 	}
@@ -299,7 +522,7 @@ func RunSelfUpdate(elevated bool) int {
 	_ = os.Remove(newPath)
 	fail := func(e error) int {
 		_ = os.Remove(newPath)
-		printStepFail(Tf("update.fail", e))
+		printStepFail(Tf("update.fail", friendlyError(e)))
 		fmt.Printf("  %s\n\n", T("update.unchanged"))
 		return 1
 	}
@@ -348,10 +571,11 @@ func RunSelfUpdate(elevated bool) int {
 }
 
 func findAsset(rel releaseInfo) (releaseAsset, bool) {
-	want := assetName()
-	for _, a := range rel.Assets {
-		if strings.EqualFold(a.Name, want) {
-			return a, true
+	for _, want := range assetNames() {
+		for _, a := range rel.Assets {
+			if strings.EqualFold(a.Name, want) {
+				return a, true
+			}
 		}
 	}
 	return releaseAsset{}, false
@@ -371,7 +595,9 @@ func dirWritable(dir string) bool {
 // downloadFile saves the asset to path and returns its SHA-256. The size is
 // checked against the release, so a truncated or padded file is rejected.
 func downloadFile(a releaseAsset, path string, set func(string)) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, a.URL, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -381,29 +607,78 @@ func downloadFile(a releaseAsset, path string, set func(string)) (string, error)
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download returned %s", resp.Status)
+	if err := checkStatus(resp); err != nil {
+		return "", err
+	}
+
+	// Without a size from the API, the server's Content-Length is used;
+	// the checksum still decides whether the file is accepted.
+	want := a.Size
+	if want <= 0 {
+		want = resp.ContentLength
+	}
+	if want > maxDownloadSize {
+		return "", fmt.Errorf("download is larger than %s", FormatBytesHuman(maxDownloadSize))
+	}
+	limit := int64(maxDownloadSize)
+	if want > 0 {
+		limit = want
 	}
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0755)
 	if err != nil {
 		return "", err
 	}
+	body := newStallReader(resp.Body, stallTimeout, cancel)
+	defer body.stop()
 	h := sha256.New()
-	pw := &progressWriter{total: a.Size, set: set}
-	n, copyErr := io.Copy(io.MultiWriter(f, h, pw), io.LimitReader(resp.Body, a.Size+1))
+	pw := &progressWriter{total: want, set: set}
+	n, copyErr := io.Copy(io.MultiWriter(f, h, pw), io.LimitReader(body, limit+1))
 	closeErr := f.Close()
 	switch {
+	case body.stalled():
+		return "", errStalled
 	case copyErr != nil:
 		return "", copyErr
 	case closeErr != nil:
 		return "", closeErr
-	case n != a.Size:
-		return "", fmt.Errorf("got %d bytes, expected %d", n, a.Size)
+	case want > 0 && n < want:
+		return "", errShort
+	case n > limit:
+		return "", fmt.Errorf("got more than the expected %d bytes", limit)
 	}
 	set(FormatBytesHuman(uint64(n)))
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
+// stallReader cancels the request when no data arrives for the idle
+// window, so a dropped Wi-Fi link fails cleanly instead of hanging.
+type stallReader struct {
+	r     io.Reader
+	timer *time.Timer
+	idle  time.Duration
+	fired atomic.Bool
+}
+
+func newStallReader(r io.Reader, idle time.Duration, cancel func()) *stallReader {
+	s := &stallReader{r: r, idle: idle}
+	s.timer = time.AfterFunc(idle, func() {
+		s.fired.Store(true)
+		cancel()
+	})
+	return s
+}
+
+func (s *stallReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if n > 0 {
+		s.timer.Reset(s.idle)
+	}
+	return n, err
+}
+
+func (s *stallReader) stop()         { s.timer.Stop() }
+func (s *stallReader) stalled() bool { return s.fired.Load() }
 
 type progressWriter struct {
 	done, total int64
@@ -412,8 +687,12 @@ type progressWriter struct {
 
 func (p *progressWriter) Write(b []byte) (int, error) {
 	p.done += int64(len(b))
-	p.set(fmt.Sprintf("%3d%%  %s / %s", p.done*100/max(p.total, 1),
-		FormatBytesHuman(uint64(p.done)), FormatBytesHuman(uint64(p.total))))
+	if p.total > 0 {
+		p.set(fmt.Sprintf("%3d%%  %s / %s", p.done*100/p.total,
+			FormatBytesHuman(uint64(p.done)), FormatBytesHuman(uint64(p.total))))
+	} else {
+		p.set(FormatBytesHuman(uint64(p.done)))
+	}
 	return len(b), nil
 }
 

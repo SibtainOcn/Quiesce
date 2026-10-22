@@ -1,0 +1,116 @@
+name: Release
+
+# Push a version tag to publish a release:
+#
+#   git tag v2.6.0 && git push origin v2.6.0
+#
+# The tag must match Version in version.go, and CHANGELOG.md should have a
+# "## [2.6.0]" section - it becomes the release notes. A tag with a suffix
+# (v2.6.0-rc1) is published as a pre-release, which qc -u ignores.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Read version from tag
+        id: ver
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          base="${version%%-*}"
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag $tag is not a version like v2.6.0"
+            exit 1
+          fi
+          if ! grep -q "Version = \"$base\"" version.go; then
+            echo "::error::version.go does not say Version = \"$base\" - bump it before tagging"
+            exit 1
+          fi
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Vet and test
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
+      - name: Stamp version into the exe resources
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          go-winres make --arch amd64,386 \
+            --product-version "${{ steps.ver.outputs.base }}.0" \
+            --file-version "${{ steps.ver.outputs.base }}.0"
+
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: windows
+        run: |
+          mkdir -p dist
+          flags="-s -w -X main.Version=${{ steps.ver.outputs.version }} -X main.Commit=${GITHUB_SHA::7}"
+          GOARCH=amd64 go build -trimpath -ldflags "$flags" -o dist/qc-64bit.exe .
+          GOARCH=386   go build -trimpath -ldflags "$flags" -o dist/qc-32bit.exe .
+
+      - name: Smoke test
+        run: |
+          out="$(./dist/qc-64bit.exe --version)"
+          echo "$out"
+          if ! grep -q "v${{ steps.ver.outputs.version }}" <<< "$out"; then
+            echo "::error::The built exe does not report v${{ steps.ver.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum qc-64bit.exe qc-32bit.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Release notes from CHANGELOG
+        run: |
+          awk -v v="${{ steps.ver.outputs.base }}" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::warning::No CHANGELOG section for ${{ steps.ver.outputs.base }}; using a generic note"
+            echo "Quiesce v${{ steps.ver.outputs.version }}" > notes.md
+          fi
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          extra=()
+          [[ "${{ steps.ver.outputs.prerelease }}" == "true" ]] && extra+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" \
+            dist/qc-64bit.exe dist/qc-32bit.exe dist/SHA256SUMS.txt \
+            --title "Quiesce $GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag "${extra[@]}"
