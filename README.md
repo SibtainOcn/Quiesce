@@ -92,11 +92,11 @@ Settings Controls:
 
 Pick how progress is shown with **Output style** in settings:
 
-- **Verbose** (default): every removed file is listed as before, with a status
-  line pinned at the bottom (step, progress, files, space freed, time, live
-  CPU/RAM and the pause/abort keys).
-- **Minimal**: no file names, just a checklist of steps that ticks over with
-  each step's file count and time.
+- **Minimal** (default): a checklist of steps that ticks over with each step's
+  file count and time, plus the file being removed right now.
+- **Verbose**: every removed file is listed, with a status line pinned at the
+  bottom (step, progress, files, space freed, time, live CPU/RAM and the
+  pause/abort keys).
 
 To keep the full list of what was removed, switch on **Save a log file of each
 run**: each run is written to a `logs` folder next to `qc.exe` (off by
@@ -133,7 +133,7 @@ The commit hash and build time are stamped in automatically from git. To set an
 explicit version string:
 
 ```bash
-go build -trimpath -ldflags "-s -w -X main.Version=2.4.0" -o qc.exe
+go build -trimpath -ldflags "-s -w -X main.Version=2.5.0" -o qc.exe
 ```
 
 ---

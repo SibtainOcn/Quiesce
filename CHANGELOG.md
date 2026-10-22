@@ -7,44 +7,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-22
+
 ### Added
 
-- **Live status while cleaning.** The classic file log now has a status line
-  pinned at the bottom: spinner, step, progress bar, files, space freed,
-  elapsed time, live CPU/RAM and the pause/abort keys. Falls back to plain
-  output where the console can't draw it.
-- **Output style setting** (`OUTPUT_STYLE`): Verbose (default) lists every
-  file as before; Minimal shows only a checklist of steps with file counts
-  and times.
-- **Pause and abort.** `P` pauses or resumes; `Q` aborts after the current
-  item. Services stopped for a step are always restarted, and the summary
-  marks steps that never ran as `not run`.
-- **Safe close.** Closing the window, Ctrl+C, logoff or shutdown mid-run
-  restarts any service stopped for cleaning and saves the run log. Ctrl+C
-  during a run acts like Q.
-- **Space freed** is now measured and shown, not just item counts.
-- **Optional run log** (`KEEP_LOG`, off by default): writes each run to
-  `logs\quiesce_<date>_<time>.log` next to `qc.exe`.
+- Live progress while cleaning, in two styles set by `OUTPUT_STYLE`: Minimal (default) step checklist with the current file, or Verbose file log with a pinned status line.
+- Status shows step, progress bar, files, space freed, elapsed time and live CPU/RAM.
+- `P` pauses/resumes and `Q` or Ctrl+C aborts safely; unrun steps show as `not run`, cut-short steps as partial.
+- Closing the window mid-run restarts any stopped service and saves the run log.
+- Optional run log (`KEEP_LOG`, off by default) in `logs\` next to `qc.exe`.
 
 ### Changed
 
-- **New coloured logo** replaces the old black-and-white one, in the exe icon
-  and the README. Source in `assets/quiesce-logo-source.png`;
-  `tools/make-icons.py` crops it, removes the black background and writes
-  `assets/quiesce-logo.png` and `winres/icon/<size>.png` (16-256 px), then
-  `go-winres make --arch amd64,386` rebuilds the `.syso` resources.
-- Cleaning steps now run through a reusable task runner (`tasks.go`), live
-  screen (`liveview.go`) and shared file-deletion helpers (`fileops.go`), so
-  future features such as browser/app cache cleaning reuse the same screen.
-- A step that crashes is now stopped and marked failed, and the run carries
-  on with the next step instead of ending.
+- New coloured logo for the exe icon and README.
+- Cleaning runs through a reusable task runner and shared file helpers; a crashing step is isolated and the run continues.
 - New strings are English-only for now; Spanish shows them in English.
 
 ### Fixed
 
-- Text missing from a translation now falls back to English. It used to
-  show the raw key (e.g. `live.keys_run`), because the translation library
-  reports a fallback as an error alongside the English text.
+- Missing translations fall back to English instead of showing the raw key.
+- A folder root that is a link or junction is no longer cleaned through.
 
 ## [2.4.0] - 2026-08-19
 

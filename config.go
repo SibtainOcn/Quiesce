@@ -53,9 +53,7 @@ type Config struct {
 	// this is for people who want the full list of what was removed.
 	KeepLog int
 
-	// OutputStyle picks the progress display while cleaning: 0 = verbose
-	// (every file listed, status line pinned at the bottom; the default),
-	// 1 = minimal (a checklist of steps, no file names).
+	// OutputStyle: 0 = verbose file log, 1 = minimal checklist (default).
 	OutputStyle int
 
 	// Language is the optional UI language override ("en", "es", ...). Empty
@@ -86,6 +84,8 @@ func DefaultConfig() *Config {
 		RamPurgeStandby:    1,
 		RamFileCache:       0, // opt-in: drops kernel file cache
 		RamTrimWorkingSets: 0, // opt-in: aggressive, causes hard faults afterwards
+
+		OutputStyle: int(StyleMinimal),
 	}
 }
 
