@@ -48,9 +48,9 @@ import (
 
 const (
 	latestReleaseAPIDefault = "https://api.github.com/repos/SibtainOcn/Quiesce/releases/latest"
-	updateCheckEvery = 24 * time.Hour
-	maxDownloadSize  = 64 << 20
-	createNoWindow   = 0x08000000
+	updateCheckEvery        = 24 * time.Hour
+	maxDownloadSize         = 64 << 20
+	createNoWindow          = 0x08000000
 )
 
 // latestReleaseAPI is a var so tests can point it elsewhere.
