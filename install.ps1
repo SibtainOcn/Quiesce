@@ -26,20 +26,32 @@ function Install-Quiesce {
 
     function Say($text, $color = 'Gray') { Write-Host "  $text" -ForegroundColor $color }
 
-    # Fetch returns the HTTP status on failure (0 = no connection).
-    function Fetch($url, $outFile) {
-        try {
-            if ($outFile) {
-                Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing
-                return @{ Status = 200 }
-            }
-            $r = Invoke-WebRequest -Uri $url -UseBasicParsing
-            return @{ Status = 200; Content = $r.Content }
-        } catch {
-            $code = 0
-            if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
-            return @{ Status = $code; Error = $_.Exception.Message }
+    $frames = [char[]]@(0x280B, 0x2819, 0x2839, 0x2838, 0x283C, 0x2834, 0x2826, 0x2827, 0x2807, 0x280F)
+    $esc = [char]27
+
+    # Returns the HTTP status on failure (0 = no connection).
+    function Fetch($label, $url, $outFile) {
+        $wc = New-Object Net.WebClient
+        $wc.Headers['User-Agent'] = 'Quiesce-installer'
+        if ($outFile) { $task = $wc.DownloadFileTaskAsync($url, $outFile) }
+        else { $task = $wc.DownloadStringTaskAsync($url) }
+        $i = 0
+        while (-not $task.IsCompleted) {
+            Write-Host -NoNewline "`r  $esc[31m$($frames[$i % $frames.Length])$esc[0m  $label"
+            Start-Sleep -Milliseconds 80
+            $i++
         }
+        $wc.Dispose()
+        if ($task.IsFaulted) {
+            Write-Host -NoNewline "`r  $esc[33m!$esc[0m  $label`n"
+            $ex = $task.Exception.GetBaseException()
+            $code = 0
+            if ($ex.Response) { $code = [int]$ex.Response.StatusCode }
+            return @{ Status = $code; Error = $ex.Message }
+        }
+        Write-Host -NoNewline "`r  $esc[32m$([char]0x2713)$esc[0m  $label`n"
+        if ($outFile) { return @{ Status = 200 } }
+        return @{ Status = 200; Content = $task.Result }
     }
 
     try {
@@ -48,13 +60,13 @@ function Install-Quiesce {
 
         New-Item -ItemType Directory -Path $work -Force | Out-Null
         Write-Host ''
-        Say "Downloading $asset from the official Quiesce releases..."
-        $r = Fetch "$base/$asset" $exe
+        Say 'Official source: github.com/SibtainOcn/Quiesce releases'
+        $r = Fetch "Downloading $asset" "$base/$asset" $exe
         if ($r.Status -eq 0) { throw "Could not connect - check your internet connection and try again. ($($r.Error))" }
         if ($r.Status -eq 404) { throw "No $asset was found in the latest Quiesce release. Nothing was installed." }
         if ($r.Status -ne 200) { throw "GitHub returned HTTP $($r.Status) - try again later." }
 
-        $r = Fetch "$base/SHA256SUMS.txt"
+        $r = Fetch 'Downloading SHA256SUMS.txt' "$base/SHA256SUMS.txt" $null
         if ($r.Status -eq 0) { throw "Could not connect - check your internet connection and try again. ($($r.Error))" }
         if ($r.Status -ne 200) { throw "This release has no checksum file, so it can't be verified. Nothing was installed." }
         $sums = $r.Content

@@ -340,13 +340,20 @@ func addToPathAndReport() int {
 		return 1
 	}
 	if install {
-		if err := installCopy(exe, dir); err != nil {
+		err := spinStep(Tf("env.installed", filepath.Join(dir, "qc.exe")), func(func(string)) error {
+			return installCopy(exe, dir)
+		})
+		if err != nil {
 			printStepFail(Tf("env.install_fail", err))
 			return 1
 		}
-		printStepOK(Tf("env.installed", filepath.Join(dir, "qc.exe")))
 	}
-	res, err := addToUserPath(dir)
+	var res pathResult
+	err = spinStep(T("env.updating_path"), func(func(string)) error {
+		var e error
+		res, e = addToUserPath(dir)
+		return e
+	})
 	switch {
 	case errors.Is(err, errTempDir):
 		printStepFail(Tf("env.temp_dir", dir, AppShort))
