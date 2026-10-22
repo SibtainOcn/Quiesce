@@ -101,6 +101,18 @@ jobs:
             echo "::warning::No CHANGELOG section for ${{ steps.ver.outputs.base }}; using a generic note"
             echo "Quiesce v${{ steps.ver.outputs.version }}" > notes.md
           fi
+          {
+            echo
+            echo "### Verify your download"
+            echo
+            echo "SHA-256 checksums (also in \`SHA256SUMS.txt\`):"
+            echo
+            echo '```text'
+            tr -d '*' < dist/SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "If your file's checksum does not match, delete it and do not run it."
+          } >> notes.md
           cat notes.md
 
       - name: Publish

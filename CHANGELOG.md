@@ -21,6 +21,9 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - When GitHub's API rate limit is hit, `qc -u` falls back to the release page and its `SHA256SUMS.txt`; the daily check never uses the API.
 - Releases are built and published by GitHub Actions when a `v*` tag is pushed: tests, `qc-64bit.exe` and `qc-32bit.exe` with the version stamped in, `SHA256SUMS.txt`, and release notes from this file.
 - `qc env` adds the folder holding `qc.exe` to the user PATH (no admin needed), or says it is already there; new terminals pick it up at once. First run offers it too, with example commands. A temporary folder is refused, and another `qc.exe` earlier on PATH is pointed out.
+- No renaming needed: run the downloaded `qc-64bit.exe` and answer yes, or run `qc env`, and it installs itself as `%LOCALAPPDATA%\Programs\Quiesce\qc.exe` (no admin) and adds that folder to PATH. A `qc.exe` already kept in a permanent folder just has its own folder added.
+- One-line install: `irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex` downloads the latest release from GitHub only, checks its SHA-256 (deleting it on a mismatch) and installs it. Works in Windows PowerShell 5.1 and PowerShell 7.
+- Release notes list the SHA-256 of each file, and the README explains how to verify a download.
 - `qc repo` (or `qc github`) opens the Quiesce GitHub page in the default browser.
 - `qc --help` is grouped into cleaning commands, tools and examples.
 - README rewritten short and plain. The full guide moved to `docs/USAGE.md`, and building and releasing to `docs/DEVELOPING.md`.

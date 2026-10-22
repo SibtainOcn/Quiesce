@@ -14,11 +14,21 @@ A fast, lightweight Windows system cleaner and RAM optimizer. Single executable,
 
 ## Get started
 
-1. Download **`qc-64bit.exe`** from the [latest release](https://github.com/SibtainOcn/Quiesce/releases/latest) (`qc-32bit.exe` for 32-bit Windows).
-2. Rename it to `qc.exe` and put it in a folder that stays put, like `C:\Tools`.
-3. Run it once and say **yes** to adding it to your PATH.
+**One line** - open PowerShell and paste:
 
-Now type `qc` in any terminal:
+```powershell
+irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex
+```
+
+It downloads the latest release from this repository, checks its SHA-256, and
+installs `qc` so it works in any terminal. No admin needed.
+
+**Or by hand** - download **`qc-64bit.exe`** (or `qc-32bit.exe` for 32-bit
+Windows) from the [latest release](https://github.com/SibtainOcn/Quiesce/releases/latest),
+[verify it](#verify-your-download), run it and say **yes** to "Install Quiesce".
+No renaming or moving needed.
+
+Then type `qc` in any terminal:
 
 ```bash
 qc            # open the menu
@@ -28,6 +38,29 @@ qc -u         # update Quiesce
 ```
 
 **[Full guide: every command, key and setting →](docs/USAGE.md)**
+
+---
+
+## Verify your download
+
+Every release lists the SHA-256 checksum of each file in its notes and in
+`SHA256SUMS.txt`. Check yours in PowerShell:
+
+```powershell
+Get-FileHash .\qc-64bit.exe -Algorithm SHA256
+```
+
+The value must match the release page exactly.
+
+> [!CAUTION]
+> **If the checksum does not match, delete the file immediately and do not run it.**
+> Quiesce runs with administrator rights. The only official source is the
+> [GitHub Releases page](https://github.com/SibtainOcn/Quiesce/releases) of this
+> repository. Copies from any other website, mirror, repository or person are
+> unofficial and not trusted - do not run them.
+
+The one-line installer and `qc -u` do this check for you and refuse any file
+that doesn't match.
 
 ---
 

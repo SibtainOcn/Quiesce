@@ -15,18 +15,34 @@ Everything you can do with Quiesce, from the menu or by typing commands.
 
 ## Install
 
+**One line** - open PowerShell and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex
+```
+
+It picks the right file for your PC, downloads it from this repository's
+releases, checks its SHA-256 and installs it. If the checksum doesn't match,
+the file is deleted and nothing is installed.
+
+**By hand:**
+
 1. Download from the [latest release](https://github.com/SibtainOcn/Quiesce/releases/latest):
    - **`qc-64bit.exe`** for almost every PC
    - **`qc-32bit.exe`** only for 32-bit Windows
-2. Rename it to `qc.exe` and put it in a folder that stays put, for example `C:\Tools`.
-3. Double-click it once. Quiesce asks two questions:
+2. [Verify it](../README.md#verify-your-download).
+3. Double-click it. Quiesce asks two questions:
    - **Check for updates automatically?** It looks once a day and tells you. It never installs on its own.
-   - **Add Quiesce to your PATH?** Say yes, and you can type `qc` in any terminal.
+   - **Install Quiesce?** Say yes. It copies itself to
+     `%LOCALAPPDATA%\Programs\Quiesce\qc.exe` and adds that folder to your PATH.
+     You can then delete the download.
 
 Then open a new terminal and type `qc`.
 
-> Skipped the PATH question? Run `qc env` any time. Until then, inside the
-> Quiesce folder PowerShell needs `.\qc` instead of `qc`.
+> Said no? Run `qc env` from the downloaded file any time.
+>
+> Already keep `qc.exe` in a folder of your own, like `C:\Tools`? Then
+> `qc env` simply adds that folder to your PATH instead.
 
 Quiesce needs administrator rights to clean. When it asks, approve the Windows
 prompt (UAC).
@@ -92,7 +108,7 @@ Good to know:
 | Command | Does |
 |---|---|
 | `qc -u` (or `qc update`) | Update Quiesce |
-| `qc env` | Add Quiesce to your PATH, so `qc` works in any terminal |
+| `qc env` | Install Quiesce / add it to your PATH, so `qc` works in any terminal |
 | `qc repo` (or `qc github`) | Open this project's page in your browser |
 | `qc -v` | Show version and checksum |
 | `qc -h` | Show every command, with examples |
