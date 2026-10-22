@@ -106,7 +106,7 @@ qc temp-1 deep bin  # chain any steps together
 | `prefetch` | Prefetch folder |
 | `errors` (`wer`) | Windows Error Reports |
 | `delivery` | Delivery Optimization |
-| `update` (`wu`) | Windows Update Cache |
+| `win-update` (`wu`) | Windows Update Cache |
 | `logs` | Windows Log Files |
 | `installer` | Windows Installer Temp |
 | `dns` | DNS Cache Flush |
@@ -142,6 +142,29 @@ To keep the full list of what was removed, switch on **Save a log file of each
 run**: each run is written to a `logs` folder next to `qc.exe` (off by
 default). Closing the window mid-run still restarts any Windows service that
 was stopped for cleaning.
+
+---
+
+## Updating
+
+```bash
+qc -u        # or: qc update
+```
+
+Quiesce checks the latest [GitHub release](https://github.com/SibtainOcn/Quiesce/releases),
+downloads it, verifies it against the SHA-256 checksum GitHub publishes,
+test-runs the new copy, then swaps it in. If any step fails, your current
+version stays as it was. It asks for admin only when the folder holding
+`qc.exe` needs it.
+
+On first run Quiesce asks whether to check for updates automatically. When
+on, it looks for a new release at most once a day, in the background, and
+shows `Update available ... run qc -u` at the top of the menu. It never
+installs anything on its own. Toggle it with **Auto update check** in
+settings, or `AUTO_UPDATE=0` / `1` in `cleaner_config.dat`.
+
+For maintainers: each release needs a `qc.exe` asset (64-bit) and, for 32-bit
+users, a `qc-386.exe` asset. GitHub records their SHA-256 automatically.
 
 ---
 

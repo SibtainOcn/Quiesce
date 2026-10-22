@@ -9,12 +9,15 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Direct run commands that skip the menu, e.g. `qc temp-1`, `qc ram`, `qc bin`, `qc deep`. Every step has one: `temp` (both temp folders), `temp-1`, `temp-2`, `prefetch`, `errors`, `delivery`, `update`, `logs`, `installer`, `dns`, `ram` (all 4 sub-options), `ram-1` to `ram-4`, `bin`, `deep`.
+- Direct run commands that skip the menu, e.g. `qc temp-1`, `qc ram`, `qc bin`, `qc deep`. Every step has one: `temp` (both temp folders), `temp-1`, `temp-2`, `prefetch`, `errors`, `delivery`, `win-update` (or `wu`), `logs`, `installer`, `dns`, `ram` (all 4 sub-options), `ram-1` to `ram-4`, `bin`, `deep`.
 - `qc all` runs every step that is ON in the saved settings.
 - Commands chain: `qc temp-1 deep bin` runs just those steps, in menu order.
 - `qc --help` lists every command.
 - From a normal terminal, a direct command asks for admin (UAC) and then runs in that same terminal, with no second window. P, Q and Ctrl+C still work. If it can't share the terminal, it opens its own window as before.
 - Direct runs list only the chosen steps, both while running and in the summary, numbered 1, 2, 3... The item totals show only when a folder-cleaning step ran.
+- Self-update: `qc -u` (or `qc update`) downloads the latest release, checks it against the SHA-256 GitHub publishes, test-runs it, then swaps it in, rolling back if any step fails. Steps show with the same spinner as cleaning, followed by the release notes. Admin is asked for only when the `qc.exe` folder needs it.
+- Daily update check: at most once a day, in the background, Quiesce checks for a new release and shows `Update available ... run qc -u` at the top of the menu and above direct-run summaries. Nothing installs on its own.
+- First run asks whether to turn the update check on (`Y` by default). Change it later with **Auto update check** in settings (`AUTO_UPDATE` in `cleaner_config.dat`).
 
 ### Changed
 
