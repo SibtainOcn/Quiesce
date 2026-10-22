@@ -53,8 +53,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--thumb) transparent}
 ::-webkit-scrollbar-thumb:hover{background-color:var(--thumb2)}
 
 /* Aurora: soft light behind everything */
-.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
-.aurora i{position:absolute;border-radius:50%;filter:blur(140px);opacity:var(--ao);will-change:transform}
+.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;contain:strict}
+.is-scrolling .aurora i{animation-play-state:paused}
+.aurora i{position:absolute;border-radius:50%;filter:blur(140px);opacity:var(--ao);will-change:transform;transform:translateZ(0)}
 .aurora i:nth-child(1){width:46vw;height:46vw;min-width:420px;min-height:420px;background:var(--a1);left:-12vw;top:-18vw;animation:drift1 26s ease-in-out infinite alternate}
 .aurora i:nth-child(2){width:40vw;height:40vw;min-width:380px;min-height:380px;background:var(--a2);right:-10vw;top:8vh;opacity:calc(var(--ao)*.8);animation:drift2 30s ease-in-out infinite alternate}
 .aurora i:nth-child(3){width:36vw;height:36vw;min-width:340px;min-height:340px;background:var(--a3);left:34vw;bottom:-22vw;opacity:calc(var(--ao)*.7);animation:drift3 34s ease-in-out infinite alternate}
@@ -181,9 +182,10 @@ footer p{margin:16px 0 0;max-width:40ch}
 
 @media(max-width:1100px){.links{display:none}.c7,.c5,.c4{grid-column:span 12}.split,.give,.hand{grid-template-columns:1fr}.steps{grid-template-columns:1fr}.help{grid-template-columns:1fr 1fr}}
 @media(max-width:640px){
+  :root{--blur:blur(14px) saturate(1.3)}.aurora i{filter:blur(90px);animation:none}
   body{font-size:17px}nav.top .wrap{height:66px;gap:12px}.end .btn.p{display:none}
   .tile,.panel,.give a,.promise{padding:30px 24px}.step{padding:28px}
-  .term{font-size:12px;border-radius:22px}.tbar{padding:14px 14px 12px 18px;flex-wrap:wrap}.tabs{order:3;width:100%;margin:12px 0 0}
+  .term{font-size:12px;border-radius:22px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}.tbar{padding:14px 14px 12px 18px;flex-wrap:wrap}.tabs{order:3;width:100%;margin:12px 0 0}
   .tab{height:36px;padding:0 14px;font-size:13px}.replay{height:34px;font-size:12.5px}
   .tbody{padding:12px 18px 24px;height:460px}.st{gap:8px}
   .cmd{flex-direction:column;align-items:flex-start;gap:4px}.copy{padding-left:20px}.copy code{font-size:14px}
@@ -444,6 +446,8 @@ $("share").onclick=function(){
 };
 
 $("theme").onclick=function(){var r=document.documentElement,n=r.dataset.theme==="light"?"dark":"light";r.dataset.theme=n;try{localStorage.setItem("quiesce-theme",n)}catch(e){}};
+
+var scrollT=0;addEventListener("scroll",function(){if(!scrollT)document.documentElement.classList.add("is-scrolling");clearTimeout(scrollT);scrollT=setTimeout(function(){document.documentElement.classList.remove("is-scrolling");scrollT=0},180)},{passive:true});
 
 var rv=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");rv.unobserve(e.target)}})},{threshold:.12,rootMargin:"0px 0px -6% 0px"});
 document.querySelectorAll(".rv").forEach(function(el){rv.observe(el)});
