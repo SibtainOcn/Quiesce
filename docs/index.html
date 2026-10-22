@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiesce</title>
+<meta name="description" content="Quiesce is your lightweight toolkit for a quieter Windows experience. Clean up digital clutter, reclaim unused resources, and fine-tune your system from a single portable CLI.">
+<meta property="og:title" content="Quiesce">
+<meta property="og:description" content="Let the noise settle. A lightweight toolkit for a quieter Windows experience.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="quiesce-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>document.documentElement.classList.add("js");try{var t=localStorage.getItem("quiesce-theme")}catch(e){}document.documentElement.dataset.theme=t||"dark"</script>
+<style>
+:root{
+  --bg:#000;--fg:#f4f5f8;--fg2:#b3b6c4;--fg3:#7d8091;
+  --glass:rgba(255,255,255,.045);--glass2:rgba(255,255,255,.085);--inset:rgba(255,255,255,.05);
+  --edge:rgba(255,255,255,.09);--shadow:0 30px 80px -30px rgba(0,0,0,.7);
+  --ac:#2fd3ff;--ink:#00131b;--soft:rgba(47,211,255,.14);
+  --h1:linear-gradient(95deg,#fff 15%,#d5f3ff 50%,#7ee8f0 85%);
+  --grad:linear-gradient(90deg,#18c8ff,#4f7dff 28%,#c94bff 55%,#ff4fa8 78%,#ffae2c);
+  --a1:#16b8e6;--a2:#3d5bff;--a3:#ff4fa8;--a4:#ffae2c;--ao:.42;
+  --thumb:rgba(255,255,255,.16);--thumb2:rgba(255,255,255,.3);
+  --r:30px;--g:clamp(20px,5vw,96px);--blur:blur(24px) saturate(1.5);
+  --d:"Plus Jakarta Sans","Inter",system-ui,sans-serif;--b:"Inter",system-ui,"Segoe UI",sans-serif;--m:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --ease:cubic-bezier(.2,.7,.2,1);
+  color-scheme:dark
+}
+:root[data-theme=light]{
+  --bg:#f6f7fb;--fg:#0b0c12;--fg2:#4a4d5c;--fg3:#7c7f8e;
+  --glass:rgba(255,255,255,.55);--glass2:rgba(255,255,255,.78);--inset:rgba(15,23,42,.045);
+  --edge:rgba(255,255,255,.95);--shadow:0 24px 60px -30px rgba(30,40,80,.25);
+  --ac:#0284c7;--ink:#fff;--soft:rgba(2,132,199,.11);
+  --h1:linear-gradient(95deg,#0b0c12 20%,#0b4a6e 60%,#0891b2 90%);
+  --a1:#7fdcff;--a2:#9db0ff;--a3:#ffb3d6;--a4:#ffd59a;--ao:.55;
+  --thumb:rgba(15,23,42,.18);--thumb2:rgba(15,23,42,.32);
+  color-scheme:light
+}
+*{box-sizing:border-box}
+html{background:var(--bg);scroll-behavior:smooth;scroll-padding-top:96px;overflow-x:clip;-webkit-text-size-adjust:100%}
+body{margin:0;color:var(--fg);font:400 18px/1.65 var(--b);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
+::selection{background:var(--ac);color:var(--ink)}
+.wrap{width:100%;margin:0 auto;padding:0 var(--g)}
+html{scrollbar-width:thin;scrollbar-color:var(--thumb) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--thumb);border-radius:99px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background-color:var(--thumb2)}
+
+/* Aurora: soft light behind everything */
+.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.aurora i{position:absolute;border-radius:50%;filter:blur(140px);opacity:var(--ao);will-change:transform}
+.aurora i:nth-child(1){width:46vw;height:46vw;min-width:420px;min-height:420px;background:var(--a1);left:-12vw;top:-18vw;animation:drift1 26s ease-in-out infinite alternate}
+.aurora i:nth-child(2){width:40vw;height:40vw;min-width:380px;min-height:380px;background:var(--a2);right:-10vw;top:8vh;opacity:calc(var(--ao)*.8);animation:drift2 30s ease-in-out infinite alternate}
+.aurora i:nth-child(3){width:36vw;height:36vw;min-width:340px;min-height:340px;background:var(--a3);left:34vw;bottom:-22vw;opacity:calc(var(--ao)*.7);animation:drift3 34s ease-in-out infinite alternate}
+.aurora i:nth-child(4){width:22vw;height:22vw;min-width:240px;min-height:240px;background:var(--a4);right:12vw;bottom:-6vw;opacity:calc(var(--ao)*.45);animation:drift2 38s ease-in-out infinite alternate-reverse}
+@keyframes drift1{to{transform:translate(8vw,6vh) scale(1.08)}}
+@keyframes drift2{to{transform:translate(-6vw,10vh) scale(.94)}}
+@keyframes drift3{to{transform:translate(-10vw,-8vh) scale(1.1)}}
+.glass{background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:inset 0 0 0 1px var(--edge),var(--shadow)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:50px;padding:0 26px;border-radius:999px;font:600 16px/1 var(--b);white-space:nowrap;transition:background .2s var(--ease),transform .2s var(--ease)}
+.btn:active{transform:scale(.98)}
+.btn svg{width:19px;height:19px}
+.btn.p{background:var(--fg);color:var(--bg)}.btn.p:hover{background:color-mix(in srgb,var(--fg) 86%,var(--bg))}
+.btn.t{background:var(--glass2);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:inset 0 0 0 1px var(--edge)}.btn.t:hover{background:color-mix(in srgb,var(--glass2) 70%,var(--fg) 8%)}
+.btn.lg{height:60px;padding:0 34px;font-size:17px}
+.ib{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;color:var(--fg2);transition:background .2s}
+.ib:hover{background:var(--glass2);color:var(--fg)}.ib svg{width:21px;height:21px}
+
+nav.top{position:sticky;top:0;z-index:9;background:color-mix(in srgb,var(--bg) 55%,transparent);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+nav.top .wrap{display:flex;align-items:center;height:80px;gap:36px}
+.brand{display:flex;align-items:center;gap:12px;font:700 22px/1 var(--d);letter-spacing:-.025em}.brand img{width:34px;height:34px}
+.links{display:flex;gap:4px;color:var(--fg2);font-size:16px}
+.links a{padding:10px 17px;border-radius:999px;transition:background .2s,color .2s}.links a:hover{background:var(--glass2);color:var(--fg)}
+.end{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+.hero{padding:clamp(72px,9vw,128px) 0 0;text-align:center}
+h1{font:800 clamp(60px,9.4vw,164px)/.94 var(--d);letter-spacing:-.055em;margin:0 auto;text-wrap:balance;background:var(--h1);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.08em}
+.gt{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.06em}
+.lede{max-width:760px;margin:30px auto 0;font-size:clamp(19px,1.55vw,22px);color:var(--fg2);line-height:1.6;text-wrap:pretty}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:44px}
+.meta{margin-top:26px;font:400 14px/1.6 var(--m);color:var(--fg3)}
+
+.stage{position:relative;max-width:1480px;margin:clamp(64px,8vw,100px) auto 0;padding:0 var(--g)}
+.term{position:relative;text-align:left;background:rgba(8,9,14,.74);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);color:#eef0f6;border-radius:var(--r);font:400 16px/1.75 var(--m);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 50px 120px -40px rgba(0,0,0,.75);overflow:hidden}
+:root[data-theme=light] .term{background:rgba(12,14,22,.9)}
+.tbar{display:flex;align-items:center;gap:10px;padding:16px 18px 16px 26px;background:rgba(255,255,255,.035);box-shadow:inset 0 -1px 0 rgba(255,255,255,.06)}
+.dots{display:flex;gap:8px;flex:none}.dots i{width:12px;height:12px;border-radius:50%}
+.dots i:nth-child(1){background:#ff5f57}.dots i:nth-child(2){background:#febc2e}.dots i:nth-child(3){background:#28c840}
+.tabs{display:flex;gap:6px;margin-left:18px;overflow-x:auto;scrollbar-width:none;min-width:0;padding:2px}.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;height:40px;padding:0 18px;border-radius:999px;color:#c9ccd8;background:rgba(255,255,255,.05);font:500 14.5px/1 var(--m);transition:background .2s,color .2s,box-shadow .2s}
+.tab:hover{color:#fff;background:rgba(255,255,255,.1)}
+.tab[aria-selected=true]{background:rgba(47,211,255,.18);color:#fff}
+.tab[aria-selected=true]:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#2fd3ff;margin-right:10px;vertical-align:1px;box-shadow:0 0 10px #2fd3ff}
+.replay{margin-left:auto;flex:none;height:40px;padding:0 18px;background:rgba(255,255,255,.07);color:#d6d8e2;border-radius:999px;font:500 13.5px/1 var(--m);transition:background .2s,color .2s}
+.replay:hover{background:rgba(255,255,255,.14);color:#fff}
+.tbody{padding:20px 32px 34px;height:600px;overflow:hidden}
+.tl{white-space:pre-wrap;overflow-wrap:anywhere;min-height:1.75em}
+.pr{color:#2fd3ff}.dim{color:#7d8091}.ok{color:#4ade80}.hl{color:#fff}
+.caret{display:inline-block;width:.55em;height:1.1em;background:#eef0f6;vertical-align:-.18em;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.st{display:flex;gap:14px}.st .ic{width:1.2em;flex:none;text-align:center;color:#2fd3ff}.st .ic.ok{color:#4ade80}
+.st .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.st .sz{color:#8d90a2;flex:none}
+.track{height:8px;border-radius:99px;background:rgba(255,255,255,.08);margin:20px 0 14px;overflow:hidden}
+.fill{height:100%;width:0;border-radius:99px;background:var(--grad);transition:width .35s var(--ease)}
+.note{margin:22px 0 0;text-align:center;font-size:15px;color:var(--fg3)}
+
+.sec{padding:clamp(104px,12vw,168px) 0 0}
+.head{max-width:900px;margin-bottom:60px}
+.eyebrow{font:600 14px/1 var(--m);color:var(--ac);letter-spacing:.06em;text-transform:uppercase;margin-bottom:20px}
+h2{margin:0;font:700 clamp(40px,5vw,78px)/1.03 var(--d);letter-spacing:-.045em;text-wrap:balance}
+.head p{margin:22px 0 0;font-size:21px;color:var(--fg2);max-width:660px}
+
+.bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:18px}
+.tile{border-radius:var(--r);padding:46px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.tile h3{margin:0;font:700 28px/1.2 var(--d);letter-spacing:-.025em}.tile p{margin:0;color:var(--fg2);font-size:18px}
+.c7{grid-column:span 7}.c5{grid-column:span 5}.c4{grid-column:span 4}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:auto;padding-top:22px}
+.chip{height:44px;padding:0 18px;border-radius:999px;background:var(--inset);color:var(--fg2);font-size:15px;transition:background .2s,color .2s}
+.chip[aria-pressed=true]{background:var(--soft);color:var(--ac);font-weight:600}
+.hint{font-size:15px!important;color:var(--fg3)!important}
+.rows{margin-top:auto;padding-top:22px;display:grid;gap:9px}
+.row{display:flex;align-items:center;gap:14px;background:var(--inset);border-radius:20px;padding:16px 20px;font-size:16.5px;color:var(--fg2);min-width:0}
+.row code{font:600 14px/1 var(--m);color:var(--ac);background:var(--soft);padding:9px 12px;border-radius:12px;flex:none}
+.row s{text-decoration:none;margin-left:auto;font:500 13.5px/1 var(--m);color:var(--fg3);flex:none}
+.row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .on{color:var(--ac)}
+
+.split{display:grid;grid-template-columns:1fr 1.2fr;gap:18px;align-items:stretch}
+.panel{border-radius:var(--r);padding:50px}
+.cmds{display:grid;gap:9px}
+.cmd{display:flex;align-items:center;gap:20px;background:var(--inset);border-radius:20px;padding:18px 24px}
+.cmd code{font:600 16px/1.3 var(--m);color:var(--ac);flex:none;min-width:13ch}.cmd span{color:var(--fg2);font-size:17px}
+.cmd.new code:after{content:"new";margin-left:10px;font:600 12px/1 var(--b);color:var(--ink);background:var(--ac);padding:4px 9px;border-radius:99px;vertical-align:2px}
+
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.step{border-radius:26px;padding:36px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.step>i{width:46px;height:46px;border-radius:50%;background:var(--soft);color:var(--ac);display:grid;place-items:center;font:700 18px/1 var(--d);font-style:normal}
+.step h3{margin:0;font:700 23px/1.3 var(--d);letter-spacing:-.015em}.step p{margin:0;color:var(--fg2);font-size:17.5px}
+.copy{display:flex;align-items:center;gap:14px;margin-top:18px;border-radius:26px;padding:11px 11px 11px 30px}
+.copy code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font:400 17px/1.5 var(--m);color:var(--fg);scrollbar-width:none}
+.copy code b{color:var(--ac);font-weight:500}
+.copy button{flex:none;height:50px;padding:0 24px;border-radius:999px;background:var(--fg);color:var(--bg);font:600 15px/1 var(--b);transition:background .2s}
+.hand{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.hand>div{border-radius:26px;padding:34px 36px;color:var(--fg2);font-size:17.5px}
+.hand b{display:block;color:var(--fg);font:700 21px/1.3 var(--d);margin-bottom:10px}
+.hand a{color:var(--fg);text-decoration:underline;text-decoration-color:var(--fg3);text-underline-offset:3px}
+.hand code{font:400 15px/1 var(--m);background:var(--inset);padding:5px 10px;border-radius:9px;color:var(--fg)}
+
+.give{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.give a{position:relative;border-radius:var(--r);padding:46px;display:flex;flex-direction:column;gap:12px;overflow:hidden;transition:background .3s var(--ease),transform .3s var(--ease)}
+.give a:hover{background:var(--glass2);transform:translateY(-3px)}
+.give .logo{width:60px;height:60px;border-radius:18px;display:grid;place-items:center;margin-bottom:10px}.give .logo svg{width:28px;height:28px}
+.give h3{margin:0;font:700 30px/1.2 var(--d);letter-spacing:-.025em}.give p{margin:0;color:var(--fg2);font-size:18px}
+.go{margin-top:18px;display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--fg)}.go svg{width:18px;height:18px;transition:transform .3s var(--ease)}
+.give a:hover .go svg{transform:translateX(4px)}
+.help{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-top:18px}
+.help>*{border-radius:26px;padding:32px;display:flex;flex-direction:column;gap:6px;text-align:left;transition:background .3s var(--ease)}
+.help>*:hover{background:var(--glass2)}
+.help svg{width:26px;height:26px;color:var(--ac);margin-bottom:12px}
+.help b{font:700 19px/1.3 var(--d);color:var(--fg)}.help span{color:var(--fg2);font-size:16.5px}
+.promise{margin-top:18px;border-radius:var(--r);padding:50px;display:flex;flex-wrap:wrap;gap:12px 56px;align-items:baseline}
+.promise h3{margin:0;font:700 32px/1.2 var(--d);letter-spacing:-.025em}.promise p{margin:0;color:var(--fg2);font-size:19px;max-width:680px}
+
+.close{padding:clamp(120px,14vw,200px) 0;text-align:center}
+.close h2{font-size:clamp(50px,7.6vw,128px);letter-spacing:-.055em;line-height:.96}
+.close .cta{margin-top:46px}
+footer{padding:64px 0 52px;color:var(--fg3);font-size:16px;background:color-mix(in srgb,var(--bg) 40%,transparent);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:inset 0 1px 0 var(--edge)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:32px 64px;justify-content:space-between}
+footer p{margin:16px 0 0;max-width:40ch}
+.fl{display:flex;flex-wrap:wrap;gap:12px 32px;align-items:flex-start;color:var(--fg2)}.fl a{transition:color .2s}.fl a:hover{color:var(--fg)}
+
+.js .rv{opacity:0;transform:translateY(28px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
+.js .rv.in{opacity:1;transform:none}
+
+@media(max-width:1100px){.links{display:none}.c7,.c5,.c4{grid-column:span 12}.split,.give,.hand{grid-template-columns:1fr}.steps{grid-template-columns:1fr}.help{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){
+  body{font-size:17px}nav.top .wrap{height:66px;gap:12px}.end .btn.p{display:none}
+  .tile,.panel,.give a,.promise{padding:30px 24px}.step{padding:28px}
+  .term{font-size:12px;border-radius:22px}.tbar{padding:14px 14px 12px 18px;flex-wrap:wrap}.tabs{order:3;width:100%;margin:12px 0 0}
+  .tab{height:36px;padding:0 14px;font-size:13px}.replay{height:34px;font-size:12.5px}
+  .tbody{padding:12px 18px 24px;height:460px}.st{gap:8px}
+  .cmd{flex-direction:column;align-items:flex-start;gap:4px}.copy{padding-left:20px}.copy code{font-size:14px}
+  .help{grid-template-columns:1fr}.hand>div{padding:28px 24px}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.js .rv{opacity:1;transform:none;transition:none}.caret,.aurora i{animation:none}}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="#top"><img src="quiesce-logo.png" alt="">Quiesce</a>
+  <div class="links"><a href="#features">Features</a><a href="#commands">Commands</a><a href="#install">Install</a><a href="#support">Support</a><a href="https://github.com/SibtainOcn/Quiesce/blob/main/docs/USAGE.md">Guide</a></div>
+  <div class="end">
+    <a class="ib" href="https://github.com/SibtainOcn/Quiesce" aria-label="Quiesce on GitHub"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+    <button class="ib" id="theme" type="button" aria-label="Switch theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" fill="currentColor"/></svg></button>
+    <a class="btn p" href="https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc-64bit.exe">Download</a>
+  </div>
+</div></nav>
+
+<main id="top">
+<header class="hero"><div class="wrap">
+  <h1 class="rv">Let the noise<br>settle</h1>
+  <p class="lede rv">Quiesce is your lightweight toolkit for a quieter Windows experience. Clean up digital clutter, reclaim unused resources, and fine-tune your system - all from a single portable CLI that runs wherever you need it</p>
+  <div class="cta rv">
+    <a class="btn p lg" href="https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc-64bit.exe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14"/></svg>Download for Windows</a>
+    <a class="btn t lg" href="#install">Install with PowerShell</a>
+  </div>
+  <div class="meta rv">Windows 10 and 11 &nbsp;&middot;&nbsp; Free, GPL-3.0 &nbsp;&middot;&nbsp; Every download is checked</div>
+</div>
+<div class="stage rv"><div class="term" aria-label="Quiesce running in a terminal">
+  <div class="tbar">
+    <div class="dots"><i></i><i></i><i></i></div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Example commands"></div>
+    <button class="replay" id="replay" type="button">Replay</button>
+  </div>
+  <div class="tbody" id="tbody" aria-live="off"></div>
+</div></div>
+<p class="note">Example runs. Your numbers will differ.</p>
+</header>
+
+<section class="sec" id="features"><div class="wrap">
+  <div class="head rv"><div class="eyebrow">Features</div><h2>Twelve steps. You decide which run.</h2><p>The safe ones are on. The ones that deserve a second thought stay off until you say so.</p></div>
+  <div class="bento">
+    <div class="tile glass c7 rv"><h3>Your cleaning list</h3><p>Tap a step to try it. In Quiesce you press <b>F</b> for settings, and your choices are saved.</p>
+      <div class="chips" id="chips"></div><p class="hint">Recycle Bin and Deep Cleanup start off. Deep Cleanup turns itself off again after one run.</p></div>
+    <div class="tile glass c5 rv"><h3>Memory, actually freed</h3><p>Four methods, run together with <b>qc ram</b> or one at a time. Quiesce shows how much came back.</p>
+      <div class="rows">
+        <div class="row"><code>ram-1</code><span>Save pending changes</span><s class="on">on</s></div>
+        <div class="row"><code>ram-2</code><span>Free cached memory</span><s class="on">on</s></div>
+        <div class="row"><code>ram-3</code><span>Free file cache</span><s>opt-in</s></div>
+        <div class="row"><code>ram-4</code><span>Trim app memory</span><s>opt-in</s></div>
+      </div></div>
+    <div class="tile glass c4 rv"><h3>Safe by default</h3><p>Services paused for cleaning always start again, even if you close the window mid-run.</p>
+      <div class="rows"><div class="row"><span>Recycle Bin</span><s>off</s></div><div class="row"><span>Deep Cleanup</span><s>off after each run</s></div></div></div>
+    <div class="tile glass c4 rv"><h3>Checked before it runs</h3><p>Installs and updates compare the file to the SHA-256 published on GitHub. A mismatch is deleted, not run.</p>
+      <div class="rows"><div class="row"><span>SHA-256 matches SHA256SUMS.txt</span><s class="on">ok</s></div></div></div>
+    <div class="tile glass c4 rv"><h3>Easy in, easy out</h3><p>Updates in one command. Leaves in one command too, taking its settings and PATH entry with it.</p>
+      <div class="rows"><div class="row"><code>qc -u</code><span>Update Quiesce</span></div><div class="row"><code>qc uninstall</code><span>Remove it cleanly</span></div></div></div>
+  </div>
+</div></section>
+
+<section class="sec" id="commands"><div class="wrap"><div class="split">
+  <div class="panel glass rv" style="display:flex;flex-direction:column;gap:20px"><div class="eyebrow" style="margin:0">Commands</div><h2>Skip the menu.</h2><p style="margin:0;color:var(--fg2);font-size:20px">Type what you want cleaned. Chain as many steps as you like. A typo is caught before anything runs, and your saved settings never change.</p><p style="margin:auto 0 0;color:var(--fg3);font-size:16px">Run <b style="color:var(--fg);font-weight:600">qc -h</b> for every command.</p></div>
+  <div class="panel glass rv"><div class="cmds">
+    <div class="cmd"><code>qc</code><span>Open the menu</span></div>
+    <div class="cmd"><code>qc all</code><span>Clean with your saved settings</span></div>
+    <div class="cmd"><code>qc temp ram</code><span>Just temp files and memory</span></div>
+    <div class="cmd"><code>qc temp-1 deep bin</code><span>Any mix, run in menu order</span></div>
+    <div class="cmd"><code>qc -u</code><span>Update Quiesce</span></div>
+    <div class="cmd"><code>qc -v</code><span>Show version and checksum</span></div>
+    <div class="cmd new"><code>qc uninstall</code><span>Remove Quiesce, its settings and PATH entry</span></div>
+  </div></div>
+</div></div></section>
+
+<section class="sec" id="install"><div class="wrap">
+  <div class="head rv"><div class="eyebrow">Install</div><h2>Installed in one paste.</h2><p>No admin needed to install. Quiesce asks for it only when a clean needs it.</p></div>
+  <div class="steps">
+    <div class="step glass rv"><i>1</i><h3>Open PowerShell</h3><p>Press the Windows key, type PowerShell and press Enter.</p></div>
+    <div class="step glass rv"><i>2</i><h3>Paste the line below</h3><p>It downloads the latest release, checks its SHA-256 and sets up <b>qc</b> for any terminal.</p></div>
+    <div class="step glass rv"><i>3</i><h3>Type qc</h3><p>The menu opens. Press Enter to clean, or F for settings.</p></div>
+  </div>
+  <div class="copy glass rv"><code><b>irm</b> https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 <b>| iex</b></code><button type="button" data-copy="irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex">Copy</button></div>
+  <div class="hand">
+    <div class="glass rv"><b>Prefer to do it by hand?</b>Download <a href="https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc-64bit.exe">qc-64bit.exe</a> (or <a href="https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc-32bit.exe">qc-32bit.exe</a> for 32-bit Windows), check it with <code>Get-FileHash .\qc-64bit.exe</code>, then run it and say yes to installing. The only official source is the <a href="https://github.com/SibtainOcn/Quiesce/releases">GitHub Releases page</a>.</div>
+    <div class="glass rv"><b>Changed your mind?</b>Run <code>qc uninstall</code>. It closes any open Quiesce window, removes the program, your settings and logs, and takes its folder off your PATH. Nothing else is touched.</div>
+  </div>
+</div></section>
+
+<section class="sec" id="support"><div class="wrap">
+  <div class="head rv"><div class="eyebrow">Support</div><h2>Like Quiesce? Keep it going.</h2><p>Quiesce is built and maintained by one person. If it saved you some space or a slow afternoon, a little support goes a long way.</p></div>
+  <div class="give">
+    <a class="glass rv" href="https://github.com/sponsors/SibtainOcn" rel="noopener">
+      <span class="logo" style="background:#ea4aaa" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 21.3s-8.5-5-8.5-11.2A4.9 4.9 0 0 1 12 6.9a4.9 4.9 0 0 1 8.5 3.2c0 6.2-8.5 11.2-8.5 11.2Z"/></svg></span>
+      <h3>GitHub Sponsors</h3><p>Monthly or one-time, handled entirely by GitHub.</p>
+      <span class="go">Become a sponsor <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+    </a>
+    <a class="glass rv" href="https://www.buymeacoffee.com/sibtainocean" rel="noopener">
+      <span class="logo" style="background:#ffdd00" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6Z"/><path d="M17 9.5h1.5a2.5 2.5 0 0 1 0 5H17M8 2.5v2.5M11.5 2.5v2.5"/></svg></span>
+      <h3>Buy Me a Coffee</h3><p>A quick one-off thank you. No account needed, and any amount helps.</p>
+      <span class="go">Buy a coffee <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+    </a>
+  </div>
+  <div class="help">
+    <a class="glass rv" href="https://github.com/SibtainOcn/Quiesce"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8Z"/></svg><b>Star it on GitHub</b><span>It helps more people find Quiesce.</span></a>
+    <a class="glass rv" href="https://github.com/SibtainOcn/Quiesce/issues"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8a4 4 0 0 1 8 0v1H8Z"/><rect x="6" y="9" width="12" height="11" rx="5"/><path d="M12 13v4M3 13h3M18 13h3"/></svg><b>Report a problem</b><span>A clear bug report saves hours.</span></a>
+    <a class="glass rv" href="https://github.com/SibtainOcn/Quiesce/blob/main/docs/TRANSLATING.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h8M8 3v2M10.5 5c-.6 3.6-2.8 6.4-6 8M6 8.5c1 2 2.6 3.6 4.5 4.5M13 21l4-10 4 10M14.3 18h5.4"/></svg><b>Translate</b><span>A new language is one file.</span></a>
+    <button class="glass rv" type="button" id="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4M8.2 13.2l7.6 4"/></svg><b>Tell a friend</b><span id="shareLabel">Word of mouth is all the marketing Quiesce has.</span></button>
+  </div>
+  <div class="promise glass rv"><h3>Free for everyone, always.</h3><p>Support never unlocks anything. Every feature stays free, whether or not you give.</p></div>
+</div></section>
+
+<section class="close"><div class="wrap"><h2 class="rv">Keep your PC<br><span class="gt">light and quiet.</span></h2>
+  <div class="cta rv"><a class="btn p lg" href="https://github.com/SibtainOcn/Quiesce/releases/latest/download/qc-64bit.exe">Download for Windows</a><a class="btn t lg" href="https://github.com/SibtainOcn/Quiesce">View on GitHub</a></div></div></section>
+</main>
+
+<footer><div class="wrap">
+  <div><a class="brand" href="#top" style="color:var(--fg)"><img src="quiesce-logo.png" alt="">Quiesce</a><p>A lightweight toolkit for a quieter Windows. Licensed GPL-3.0-or-later.</p></div>
+  <div class="fl"><a href="https://github.com/SibtainOcn/Quiesce">GitHub</a><a href="https://github.com/SibtainOcn/Quiesce/releases">Releases</a><a href="https://github.com/SibtainOcn/Quiesce/blob/main/docs/USAGE.md">Guide</a><a href="https://github.com/SibtainOcn/Quiesce/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/SibtainOcn/Quiesce/blob/main/docs/TRANSLATING.md">Translate</a><a href="https://www.buymeacoffee.com/sibtainocean">Buy me a coffee</a></div>
+</div></footer>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var calm=matchMedia("(prefers-reduced-motion: reduce)").matches;
+var SPIN="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",CHECK="✓";
+var body=$("tbody"),tabs=$("tabs"),tok=0,cur=0,auto=!calm,into=null;
+
+function Stop(){}
+function sleep(ms,me){return new Promise(function(ok,no){setTimeout(function(){me!==tok?no(new Stop()):ok()},calm?0:ms)})}
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+function line(html,cls){var d=document.createElement("div");d.className="tl "+(cls||"");d.innerHTML=html==null?"":html;(into||body).appendChild(d);return d}
+function mb(m){return m>=1000?(m/1000).toFixed(1)+" GB":m+" MB"}
+
+async function typeCmd(me,cmd){
+  var d=line('<span class="pr">PS C:\\&gt;</span> <span class="hl"></span><span class="caret"></span>');
+  var t=d.children[1];await sleep(500,me);
+  for(var i=0;i<cmd.length;i++){t.textContent+=cmd[i];await sleep(45+Math.random()*55,me)}
+  await sleep(380,me);d.removeChild(d.children[2]);
+}
+async function step(me,name,val,ms,progress){
+  var d=line('<div class="st"><span class="ic">'+SPIN[0]+'</span><span class="nm"></span><span class="sz"></span></div>');
+  var st=d.firstChild,ic=st.children[0],sz=st.children[2],f=0;st.children[1].textContent=name;
+  var t=calm?0:setInterval(function(){ic.textContent=SPIN[++f%10]},80);
+  try{
+    if(progress){for(var p=0;p<=100;p+=4){sz.textContent=progress(p);await sleep(ms/26,me)}}
+    else await sleep(ms,me);
+  }finally{clearInterval(t)}
+  ic.textContent=CHECK;ic.className="ic ok";sz.textContent=val||"";
+}
+function bar(){var d=line('<div class="track"><div class="fill"></div></div>');return d.querySelector(".fill")}
+async function ask(me,q,a){
+  var d=line('  <span class="hl">'+esc(q)+'</span> <span class="hl"></span><span class="caret"></span>');
+  await sleep(1100,me);d.children[1].textContent=a;await sleep(300,me);d.removeChild(d.children[2]);
+}
+
+var SCENES=[
+  {cmd:"qc all",run:async function(me){
+    line('<span class="dim">Requesting administrator privileges...</span>');await sleep(500,me);
+    var S=[["Windows Temp",812],["User Temp",1240],["Prefetch",96],["Error Reports",143],["Delivery Optimization",388],["Windows Update Cache",902],["Log Files",74],["Installer Temp",211],["DNS Cache",0],["RAM",1650]];
+    var list=document.createElement("div"),fill,disk=0,i,n=S.length;
+    body.appendChild(list);fill=bar();
+    try{
+      into=list;
+      for(i=0;i<n;i++){
+        await step(me,S[i][0],S[i][0]==="DNS Cache"?"refreshed":S[i][0]==="RAM"?mb(S[i][1])+" freed":mb(S[i][1]),330);
+        if(S[i][0]!=="RAM")disk+=S[i][1];
+        fill.style.width=((i+1)/n*100)+"%";
+      }
+    }finally{into=null}
+    line('<span class="ok">Done. '+mb(disk)+' cleaned, '+mb(1650)+' of memory released.</span>');
+  }},
+  {cmd:"qc temp ram",run:async function(me){
+    line('<span class="dim">Requesting administrator privileges...</span>');await sleep(500,me);
+    line('');line('<span class="hl">  Quiesce</span><span class="dim">  2 steps</span>');line('');
+    await step(me,"Windows Temp","812 MB  1,904 items",520);
+    await step(me,"User Temp","1.2 GB  6,311 items",640);
+    await step(me,"RAM  Save pending changes","done",380);
+    await step(me,"RAM  Free cached memory","1.4 GB freed",620);
+    line('');
+    line('<span class="dim">  Memory in use   </span><span class="hl">11.8 GB</span><span class="dim">  before</span>');
+    line('<span class="dim">                  </span><span class="ok">10.4 GB</span><span class="dim">  after</span>');
+    line('');
+    line('<span class="ok">Done. 2.0 GB cleaned, 1.4 GB of memory released.</span>');
+  }},
+  {cmd:"qc -u",run:async function(me){
+    line('');
+    await step(me,"Checking for updates","v2.5.1 is out (you have v2.5.0)",700);
+    await step(me,"Downloading qc-64bit.exe","9.2 MB",1300,function(p){return p+"%  "+(9.2*p/100).toFixed(1)+" MB / 9.2 MB"});
+    await step(me,"Verifying SHA-256","matches",520);
+    await step(me,"Testing the new version","v2.5.1",520);
+    await step(me,"Installing","",420);
+    line('');
+    line('<span class="ok">'+CHECK+'</span>  <span class="hl">Updated v2.5.0 to v2.5.1</span>');
+    line('');
+    line('<span class="dim">What\'s new:</span>');
+    line('  qc uninstall removes Quiesce, its settings and PATH entry');
+    line('  Direct commands: qc temp, qc ram, qc deep and more');
+    line('  One-line install that checks every download');
+  }},
+  {cmd:"qc uninstall",run:async function(me){
+    line('');
+    await ask(me,"Remove Quiesce, its settings and logs from this PC? [y/N]","y");
+    line('');
+    await step(me,"Removing settings and logs","3 files",520);
+    await step(me,"Removing qc.exe","",460);
+    await step(me,"Removing the Quiesce folder","",420);
+    await step(me,"Cleaning your PATH","Quiesce folder removed",560);
+    line('');
+    line('<span class="ok">'+CHECK+'</span>  <span class="hl">Quiesce is uninstalled. Open a new terminal to finish.</span>');
+    line('<span class="dim">Reinstall any time: irm https://raw.githubusercontent.com/SibtainOcn/Quiesce/main/install.ps1 | iex</span>');
+  }},
+  {cmd:"qc -v",run:async function(me){
+    var L=['','  <span class="hl">Quiesce v2.5.1</span><span class="dim">  (f31e13b)</span>','  SibtainOcn  <span class="dim">-</span>  <span class="pr">https://github.com/SibtainOcn/Quiesce</span>','  <span class="dim">GPL-3.0-or-later - free software, with no warranty</span>','','  <span class="dim">SHA-256</span>  <span class="hl">4157587951add23730a4fd0f42cd6e62e6504e1f40e882be19d1427911868273</span>','  <span class="dim">Compare with the checksum on github.com/SibtainOcn/Quiesce/releases</span>'];
+    for(var i=0;i<L.length;i++){line(L[i]);await sleep(90,me)}
+  }}
+];
+
+SCENES.forEach(function(s,i){
+  var b=document.createElement("button");b.type="button";b.className="tab";b.setAttribute("role","tab");b.textContent=s.cmd;
+  b.onclick=function(){auto=false;play(i)};tabs.appendChild(b);
+});
+
+async function play(i){
+  var me=++tok;cur=i;body.innerHTML="";into=null;
+  [].forEach.call(tabs.children,function(b,j){b.setAttribute("aria-selected",j===i?"true":"false")});
+  var tb=tabs.children[i];tabs.scrollTo({left:tb.offsetLeft-tabs.offsetLeft-8,behavior:calm?"auto":"smooth"});
+  try{
+    await typeCmd(me,SCENES[i].cmd);
+    await SCENES[i].run(me);
+    line('');line('<span class="pr">PS C:\\&gt;</span> <span class="caret"></span>');
+    if(auto){await sleep(3400,me);play((i+1)%SCENES.length)}
+  }catch(e){if(!(e instanceof Stop))throw e}
+}
+$("replay").onclick=function(){play(cur)};
+
+var started=false,io=new IntersectionObserver(function(es){
+  es.forEach(function(e){if(e.isIntersecting&&!started){started=true;play(0)}});
+},{threshold:.25});
+io.observe(body);
+
+var OFF=["Recycle Bin","Deep Cleanup"],ON=["Windows Temp","User Temp","Prefetch","Error Reports","Delivery Optimization","Windows Update Cache","Log Files","Installer Temp","DNS Cache","RAM"];
+var c=$("chips");
+ON.map(function(n){return[n,1]}).concat(OFF.map(function(n){return[n,0]})).forEach(function(a){
+  var b=document.createElement("button");b.type="button";b.className="chip";b.textContent=a[0];b.setAttribute("aria-pressed",a[1]?"true":"false");
+  b.onclick=function(){b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")==="true"?"false":"true")};c.appendChild(b);
+});
+
+document.querySelectorAll("[data-copy]").forEach(function(b){b.onclick=function(){
+  (navigator.clipboard?navigator.clipboard.writeText(b.dataset.copy):Promise.reject()).then(function(){b.textContent="Copied";setTimeout(function(){b.textContent="Copy"},1800)},function(){b.textContent="Select and copy"});
+}});
+
+$("share").onclick=function(){
+  var d={title:"Quiesce",text:"Let the noise settle. A lightweight toolkit for a quieter Windows.",url:"https://github.com/SibtainOcn/Quiesce"};
+  if(navigator.share){navigator.share(d).catch(function(){})}
+  else if(navigator.clipboard){navigator.clipboard.writeText(d.url).then(function(){$("shareLabel").textContent="Link copied. Thank you!"})}
+};
+
+$("theme").onclick=function(){var r=document.documentElement,n=r.dataset.theme==="light"?"dark":"light";r.dataset.theme=n;try{localStorage.setItem("quiesce-theme",n)}catch(e){}};
+
+var rv=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");rv.unobserve(e.target)}})},{threshold:.12,rootMargin:"0px 0px -6% 0px"});
+document.querySelectorAll(".rv").forEach(function(el){rv.observe(el)});
+})();
+</script>
+</body>
+</html>
