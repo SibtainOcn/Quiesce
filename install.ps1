@@ -33,6 +33,13 @@ function Install-Quiesce {
     function Fetch($label, $url, $outFile) {
         $wc = New-Object Net.WebClient
         $wc.Headers['User-Agent'] = 'Quiesce-installer'
+        # Skip proxy auto-detection (adds about a second); use a set proxy directly.
+        $wc.Proxy = $null
+        $ie = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+        if ($ie -and $ie.ProxyEnable -eq 1 -and $ie.ProxyServer) {
+            $p = ($ie.ProxyServer -split ';' | Where-Object { $_ -notmatch '=' -or $_ -match '^https?=' } | Select-Object -Last 1) -replace '^https?=', ''
+            if ($p) { $wc.Proxy = New-Object Net.WebProxy("http://$p", $true) }
+        }
         if ($outFile) { $task = $wc.DownloadFileTaskAsync($url, $outFile) }
         else { $task = $wc.DownloadStringTaskAsync($url) }
         $i = 0
