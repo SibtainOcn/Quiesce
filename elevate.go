@@ -101,9 +101,15 @@ func attachToCaller(pid uint32) bool {
 	return attached
 }
 
+// detachedStd keeps the original std files reachable. Their finalizers would
+// otherwise close the old handle numbers, which Windows may have reused for
+// the new console handles, cutting off all output mid-run.
+var detachedStd []*os.File
+
 // rebindStdHandles points stdin/stdout/stderr at the current console. The
 // old handles belonged to the console that was just freed.
 func rebindStdHandles() {
+	detachedStd = append(detachedStd, os.Stdin, os.Stdout, os.Stderr)
 	open := func(name string) (windows.Handle, bool) {
 		p, _ := windows.UTF16PtrFromString(name)
 		h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE,
