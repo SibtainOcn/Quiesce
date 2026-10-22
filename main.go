@@ -81,6 +81,11 @@ func main() {
 
 	// The user PATH needs no Admin, and writing it elevated could pick the
 	// wrong account's settings.
+	if !isAttached && len(args) > 0 && isUninstallCmd(args[0]) {
+		code := RunUninstall(args[1:])
+		RestoreConsoleMode()
+		os.Exit(code)
+	}
 	if !isAttached && len(args) == 1 {
 		var run func() int
 		switch strings.ToLower(strings.TrimSpace(args[0])) {

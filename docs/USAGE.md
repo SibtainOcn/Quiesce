@@ -7,6 +7,7 @@ Everything you can do with Quiesce, from the menu or by typing commands.
 - [Commands](#commands)
 - [Tools](#tools)
 - [Updating](#updating)
+- [Uninstalling](#uninstalling)
 - [Settings](#settings)
 - [Language](#language)
 - [Is my copy official?](#is-my-copy-official)
@@ -110,6 +111,7 @@ Good to know:
 | `qc -u` (or `qc update`) | Update Quiesce |
 | `qc env` | Install Quiesce / add it to your PATH, so `qc` works in any terminal |
 | `qc repo` (or `qc github`) | Open this project's page in your browser |
+| `qc uninstall` | Remove Quiesce from this PC ([details](#uninstalling)) |
 | `qc -v` | Show version and checksum |
 | `qc -h` | Show every command, with examples |
 
@@ -129,6 +131,31 @@ version stays as it is and you get a short message saying why.
 With update checks on, `Update available ... run qc -u` appears at the top of
 the menu when there is something new. Turn checks on or off with
 **Auto update check** in settings.
+
+---
+
+## Uninstalling
+
+```bash
+qc uninstall
+```
+
+Answer `y` and Quiesce removes:
+
+- `qc.exe` and the `%LOCALAPPDATA%\Programs\Quiesce` folder
+- your settings (`cleaner_config.dat`), the update check file and run logs
+- its folder from your user PATH. Nothing else on PATH is touched.
+
+Any other Quiesce window that is open is closed first. A window running as
+administrator can only be closed by you, or by running `qc uninstall` from an
+admin terminal. No admin is needed otherwise.
+
+`qc uninstall -y` skips the question, for scripts. Open a new terminal
+afterwards: the one you used still has the old PATH.
+
+If you keep `qc.exe` in a folder of your own, like `C:\Tools`, only Quiesce's
+files are deleted. The folder stays, and it leaves your PATH only if nothing
+else is in it.
 
 ---
 
