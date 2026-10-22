@@ -7,6 +7,25 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Direct run commands that skip the menu, e.g. `qc temp-1`, `qc ram`, `qc bin`, `qc deep`. Every step has one: `temp` (both temp folders), `temp-1`, `temp-2`, `prefetch`, `errors`, `delivery`, `update`, `logs`, `installer`, `dns`, `ram` (all 4 sub-options), `ram-1` to `ram-4`, `bin`, `deep`.
+- `qc all` runs every step that is ON in the saved settings.
+- Commands chain: `qc temp-1 deep bin` runs just those steps, in menu order.
+- `qc --help` lists every command.
+- From a normal terminal, a direct command asks for admin (UAC) and then runs in that same terminal, with no second window. P, Q and Ctrl+C still work. If it can't share the terminal, it opens its own window as before.
+- Direct runs list only the chosen steps, both while running and in the summary. The item totals show only when a folder-cleaning step ran.
+
+### Changed
+
+- Commands are checked before elevation, so a typo never asks for Admin; unknown commands exit with code 2.
+- Direct runs never change the saved settings. Exit code 1 means the run was aborted or the admin prompt was declined.
+- A window opened just for a run waits for ENTER; a shared terminal returns to the prompt.
+
+### Fixed
+
+- The progress bar and CPU/RAM line no longer stay on screen above the summary once a run ends, in both output styles.
+
 ## [2.5.0] - 2026-10-22
 
 ### Added

@@ -51,6 +51,8 @@ type RunOptions struct {
 	Style  OutputStyle // verbose file log, or minimal checklist
 	Title  string      // heads the minimal checklist, e.g. "Cleaning"
 	LogDir string      // when not empty, keep a plain-text log there
+
+	HideSkipped bool // leave disabled tasks off the screen (direct commands)
 }
 
 // TaskCtx is what a running task uses to report progress and to cooperate
@@ -86,15 +88,28 @@ func (tc *TaskCtx) WithService(name string, fn func()) {
 // RunTasks runs tasks in order with live progress. The console is handed
 // back in its normal state afterwards, ready for the caller's summary.
 func RunTasks(tasks []Task, opts RunOptions) (rep RunReport) {
-	names := make([]string, len(tasks))
-	enabled := make([]bool, len(tasks))
+	rep.Ran = make([]bool, len(tasks))
+
+	// shown maps screen rows to task indexes.
+	var shown []int
 	for i, t := range tasks {
-		names[i] = t.Name
-		enabled[i] = t.Enabled
+		if t.Enabled || !opts.HideSkipped {
+			shown = append(shown, i)
+		}
+	}
+	if len(shown) == 0 {
+		for i := range tasks {
+			shown = append(shown, i)
+		}
+	}
+	names := make([]string, len(shown))
+	enabled := make([]bool, len(shown))
+	for row, i := range shown {
+		names[row] = tasks[i].Name
+		enabled[row] = tasks[i].Enabled
 	}
 
 	v := NewLiveView(opts.Style, opts.Title, names, enabled, opts.LogDir)
-	rep.Ran = make([]bool, len(tasks))
 
 	// Always restore the console and flush the log, even if something below
 	// panics outside a task.
@@ -106,22 +121,23 @@ func RunTasks(tasks []Task, opts RunOptions) (rep RunReport) {
 	}()
 
 	tc := &TaskCtx{v: v}
-	for i, t := range tasks {
+	for row, i := range shown {
+		t := tasks[i]
 		if !t.Enabled {
-			v.SkipTask(i)
+			v.SkipTask(row)
 			continue
 		}
 		if !v.Checkpoint() {
-			v.NotRun(i)
+			v.NotRun(row)
 			continue
 		}
-		v.BeginTask(i, t.Title, t.Alert)
+		v.BeginTask(row, t.Title, t.Alert)
 		rep.Ran[i] = true
 		out := runTaskSafely(t, tc)
 		if v.Aborted() {
 			out = TaskOutcome{Detail: T("summary.partial"), Warn: true}
 		}
-		v.EndTask(i, out.Detail, out.Warn)
+		v.EndTask(row, out.Detail, out.Warn)
 	}
 	return rep
 }

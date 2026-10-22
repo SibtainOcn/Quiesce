@@ -18,6 +18,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -38,11 +39,22 @@ func main() {
 		}
 	}()
 
+	// The elevated copy of a direct command joins the caller's terminal
+	// before any console setup, so that setup applies to the right console.
+	args := os.Args[1:]
+	attachPID, rest, isAttached, attachErr := splitAttachArgs(args)
+	if attachErr != nil {
+		os.Exit(2)
+	}
+	sharedConsole := false
+	if isAttached {
+		sharedConsole = attachToCaller(attachPID)
+		args = rest
+	}
+
 	// Informational flags are handled BEFORE elevation: checking what a
 	// binary claims to be (--version prints author, repo, license and the
 	// executable's own SHA-256) should never require granting it Admin.
-	// EnsureAdmin relaunches without arguments, so a flag would be lost
-	// across the elevation anyway.
 	EnableVirtualTerminalProcessing()
 	EnableUTF8Console()
 	DisableQuickEditMode()
@@ -59,11 +71,29 @@ func main() {
 	configFilePath := ConfigFilePath()
 	InitLanguage(configFilePath)
 
-	if HandleCLIFlags(os.Args[1:]) {
+	if !isAttached && HandleCLIFlags(args) {
 		return
 	}
 
-	// Ensure Administrator privilege
+	// Run commands are checked before elevation, so a typo never asks for Admin.
+	runCmds, err := ParseRunArgs(args)
+	if err == nil && isAttached && len(runCmds) == 0 {
+		err = errors.New(Tf("cli.unknown", attachFlag))
+	}
+	if err != nil {
+		fmt.Printf("\n  \x1b[31m%s\x1b[0m\n  %s\n\n", err, Tf("cli.see_help", AppShort))
+		RestoreConsoleMode()
+		os.Exit(2)
+	}
+
+	// From a normal terminal, a direct command runs elevated in this same
+	// terminal instead of a new window.
+	if len(runCmds) > 0 && !IsAdmin() {
+		code := RunElevatedInTerminal(runCmds)
+		RestoreConsoleMode()
+		os.Exit(code)
+	}
+
 	EnsureAdmin()
 
 	// Re-apply console setup: EnsureAdmin relaunches into a fresh console, so
@@ -76,7 +106,10 @@ func main() {
 	// Set a clean console window title instead of showing the exe's file
 	// path. The version is included so a screenshot always says which build
 	// it came from.
-	SetConsoleTitle(AppName + " v" + Version)
+	// The caller's terminal keeps its own title.
+	if !sharedConsole {
+		SetConsoleTitle(AppName + " v" + Version)
+	}
 
 	// From here on Ctrl+C and closing the window restore any stopped
 	// service and the console before exiting.
@@ -86,6 +119,12 @@ func main() {
 	cfg, err := LoadConfig(configFilePath)
 	if err != nil {
 		fmt.Printf("%s\n", Tf("common.config_warn", err))
+	}
+
+	if len(runCmds) > 0 {
+		code := RunCLI(cfg, runCmds)
+		RestoreConsoleMode()
+		os.Exit(code)
 	}
 
 	osP1, osP2 := GetOSVersionParts()

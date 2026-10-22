@@ -152,6 +152,7 @@ func PrintHelp() {
 	fmt.Printf("    %s\n", T("help.version"))
 	fmt.Printf("    %s\n", T("help.help"))
 	fmt.Println()
+	printCLICommands()
 }
 
 // HandleCLIFlags processes any command-line flag and reports whether the
