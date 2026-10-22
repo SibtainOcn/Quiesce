@@ -90,6 +90,46 @@ Settings Controls:
   E        Save & return to main menu
 ```
 
+### Direct commands
+
+Skip the menu and run steps straight from a terminal:
+
+```bash
+qc all              # every step ON in your saved settings
+qc temp             # Windows Temp + User Temp
+qc temp-1 deep bin  # chain any steps together
+```
+
+| Command | Step |
+|---|---|
+| `temp-1`, `temp-2`, `temp` | Windows Temp, User Temp, both |
+| `prefetch` | Prefetch folder |
+| `errors` (`wer`) | Windows Error Reports |
+| `delivery` | Delivery Optimization |
+| `update` (`wu`) | Windows Update Cache |
+| `logs` | Windows Log Files |
+| `installer` | Windows Installer Temp |
+| `dns` | DNS Cache Flush |
+| `ram` | RAM Optimization, all 4 sub-options |
+| `ram-1` … `ram-4` | Flush modified, purge standby, file cache, trim working sets |
+| `bin` (`recycle`) | Empty Recycle Bin |
+| `deep` | Deep Cleanup |
+
+Commands only pick what runs this time; saved settings are never changed.
+Output style and the log file option still apply. Only the steps you chose
+are listed while it runs. `qc --help` shows the list.
+
+From a normal (non-admin) terminal, approve the UAC prompt and the run shows
+in that same terminal - no second window. `P`, `Q` and `Ctrl+C` work as usual.
+If the run can't share your terminal (for example, an admin account other than
+yours was used at the UAC prompt), it opens its own window instead.
+
+PowerShell doesn't run programs from the current folder by name, so inside
+the Quiesce folder type `.\qc dns`. To type `qc` from anywhere, add the folder
+that holds `qc.exe` to your `PATH`.
+
+Exit codes: `0` done, `1` aborted or admin declined, `2` unknown command.
+
 Pick how progress is shown with **Output style** in settings:
 
 - **Minimal** (default): a checklist of steps that ticks over with each step's

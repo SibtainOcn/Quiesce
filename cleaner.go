@@ -239,8 +239,9 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 	}
 
 	opts := RunOptions{
-		Style: OutputStyle(cfg.OutputStyle),
-		Title: T("live.title_clean"),
+		Style:       OutputStyle(cfg.OutputStyle),
+		Title:       T("live.title_clean"),
+		HideSkipped: cfg.directRun,
 	}
 	if cfg.KeepLog == 1 {
 		opts.LogDir = LogDirPath()

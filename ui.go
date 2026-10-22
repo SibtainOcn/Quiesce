@@ -813,12 +813,23 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 	fmt.Fprintln(w, centerInBox(T("summary.title")))
 	fmt.Fprintln(w, "+---------------------------------------+")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
-	fmt.Fprintf(w, "  %s\n", Tf("summary.skipped", results.TotalFailed))
+	// Direct commands list only the steps that were asked for.
+	only := cfg.directRun
+	fileSteps := false
+	for i := 1; i <= 8; i++ {
+		fileSteps = fileSteps || cfg.GetVal(i) == 1
+	}
+	showTotals := !only || fileSteps
+	if showTotals {
+		fmt.Fprintf(w, "  %s%s%s\n", RED, Tf("summary.total", results.TotalDeleted), RST)
+		fmt.Fprintf(w, "  %s\n", Tf("summary.skipped", results.TotalFailed))
+	}
 	if results.Aborted {
 		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, T("summary.aborted"), RST)
 	}
-	fmt.Fprintln(w)
+	if showTotals || results.Aborted {
+		fmt.Fprintln(w)
+	}
 
 	// Summary labels are padded to the widest translated label rather than
 	// carrying typed trailing spaces, so the ":" column holds in any language.
@@ -834,10 +845,20 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 	}
 	nameW := max(maxKeyWidth(shortKeys...), len([]rune(deepPlain)))
 
+	// num is the row number: the step number, or 1, 2, 3... in direct runs.
+	row := 0
+	num := func(idx int) string {
+		row++
+		if only {
+			return fmt.Sprintf("[%d]", row)
+		}
+		return fmt.Sprintf("[%d]", idx)
+	}
+
 	// line prints one summary row: "  [n] <label> : <value>".
 	line := func(idx int, value string) {
 		name := padRight(T(fmt.Sprintf("step.%d.short", idx)), nameW)
-		fmt.Fprintf(w, "  %-5s%s : %s\n", fmt.Sprintf("[%d]", idx), name, value)
+		fmt.Fprintf(w, "  %-5s%s : %s\n", num(idx), name, value)
 	}
 	dim := func(s string) string { return CYAN + s + RST }
 
@@ -861,7 +882,9 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 
 	for _, s := range steps {
 		if s.cfg != 1 {
-			line(s.idx, dim(T("common.skipped")))
+			if !only {
+				line(s.idx, dim(T("common.skipped")))
+			}
 			continue
 		}
 		if results.NotRun[s.idx] {
@@ -929,7 +952,9 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 			deepState = RED + T("summary.completed") + RST
 		}
 	}
-	fmt.Fprintf(w, "  %-5s%s : %s\n", "[12]", deepTag, deepState)
+	if !only || results.DeepCleanupRan || results.NotRun[12] {
+		fmt.Fprintf(w, "  %-5s%s : %s\n", num(12), deepTag, deepState)
+	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "+---------------------------------------+")
@@ -943,6 +968,5 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, Tf("summary.log_fail", results.LogErr), RST)
 	}
 	fmt.Fprintf(w, "  %s\n", VersionLine())
-	fmt.Fprintf(w, "  %s%s%s\n", CYAN, Repo, RST)
 	fmt.Fprintln(w)
 }

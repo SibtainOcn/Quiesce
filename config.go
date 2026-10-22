@@ -64,6 +64,10 @@ type Config struct {
 	// before elevation. Without round-tripping it, saving from the settings
 	// screen would silently delete the user's LANGUAGE= line.
 	Language string
+
+	// directRun is set for direct commands: only the chosen steps are shown
+	// while running. Never saved.
+	directRun bool
 }
 
 func DefaultConfig() *Config {

@@ -548,18 +548,21 @@ func (v *LiveView) Close() (logPath string, logErr error) {
 		}
 		switch v.mode {
 		case modeVerbose:
-			// Clear the pinned rows, give the whole window back to normal
-			// scrolling, then print the final status where the log ended -
-			// the summary follows it like any other output.
+			// Clear the pinned rows and give the whole window back to normal
+			// scrolling; the summary follows the log.
 			b.WriteString("\x1b7")
 			for r := h - pinnedRows + 1; r <= h; r++ {
 				fmt.Fprintf(&b, "\x1b[%d;1H\x1b[2K", r)
 			}
 			b.WriteString("\x1b[r\x1b8")
-			b.WriteString("\n" + clipANSI(v.statusLocked(w-1, time.Now()), w-1) + "\n")
 		case modeMinimal:
+			// Keep the finished checklist, drop the progress bar and CPU rows.
 			v.drawLocked(&b, w, h, time.Now())
-			fmt.Fprintf(&b, "\x1b[%d;1H", minimalRows(len(v.tasks))+1)
+			last := minimalRows(len(v.tasks))
+			for r := last - 3; r <= last; r++ {
+				fmt.Fprintf(&b, "\x1b[%d;1H\x1b[2K", r)
+			}
+			fmt.Fprintf(&b, "\x1b[%d;1H", last-3)
 		}
 		if v.mode != modePlain {
 			b.WriteString("\x1b[?25h")
