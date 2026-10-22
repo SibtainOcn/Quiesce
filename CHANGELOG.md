@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Live cleaning screen.** Instead of a long scroll of `[OK]` lines, the run
+  now shows the file log in a scrolling pane, a pinned checklist of steps,
+  a status line (spinner, step, progress bar, items, space freed, elapsed
+  time) and a footer with live CPU/RAM. Falls back to plain output where the
+  console can't draw it.
+- **Pause and abort.** `P` pauses or resumes; `Q` aborts after the current
+  item. Services stopped for a step are always restarted, and the summary
+  marks steps that never ran as `not run`.
+- **Space freed** is now measured and shown, not just item counts.
+- **Optional run log** (`KEEP_LOG`, off by default): writes each run to
+  `logs\quiesce_<date>_<time>.log` next to `qc.exe`.
+
 ### Changed
 
 - **New coloured logo** replaces the old black-and-white one, in the exe icon
@@ -14,6 +28,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `tools/make-icons.py` crops it, removes the black background and writes
   `assets/quiesce-logo.png` and `winres/icon/<size>.png` (16-256 px), then
   `go-winres make --arch amd64,386` rebuilds the `.syso` resources.
+- Cleaning steps now run through a reusable task runner (`tasks.go`), live
+  screen (`liveview.go`) and shared file-deletion helpers (`fileops.go`), so
+  future features such as browser/app cache cleaning reuse the same screen.
+- A step that crashes is now stopped and marked failed, and the run carries
+  on with the next step instead of ending.
+- New strings are English-only for now; Spanish shows them in English.
+
+### Fixed
+
+- Text missing from a translation now falls back to English. It used to
+  show the raw key (e.g. `live.keys_run`), because the translation library
+  reports a fallback as an error alongside the English text.
 
 ## [2.4.0] - 2026-08-19
 

@@ -78,12 +78,26 @@ Launch **`qc.exe`** as Administrator:
   ENTER    Run cleaner with current settings
   F        Open settings menu
 
+While Cleaning:
+  P        Pause / resume
+  Q        Abort (stops safely, restarts any stopped services)
+
 Settings Controls:
   W / S    Move selection Up / Down
   D / A    Toggle step ON / OFF
   L        Choose language
   E        Save & return to main menu
 ```
+
+While cleaning runs, the window shows a live screen: deleted files scroll on
+the left, a checklist of steps stays pinned on the right, and the bottom lines
+show progress, items removed, space freed, elapsed time and live CPU/RAM
+usage. On a narrow window the checklist hides, and if the console can't draw
+the live screen Quiesce falls back to plain line-by-line output.
+
+The live screen keeps only recent lines. To keep the full list of what was
+removed, switch on **Save a log file of each run** in settings: each run is
+then written to a `logs` folder next to `qc.exe` (off by default).
 
 ---
 

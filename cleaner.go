@@ -22,8 +22,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/sys/windows/registry"
@@ -41,7 +39,14 @@ type StepResults struct {
 	Ram               RamResult
 	DeepCleanupRan    bool
 	DeepCleanupFailed bool
-	StepCounts        [12]int64
+	StepCounts        [13]int64 // indexed by step number, 1-12
+
+	// NotRun marks enabled steps that never started because the run was
+	// aborted. Zero value means "ran", so older callers need no changes.
+	NotRun  [13]bool
+	Aborted bool
+	LogPath string // log file written for this run, if any
+	LogErr  string // why the log file could not be written, if it failed
 }
 
 func stopService(name string) {
@@ -123,338 +128,199 @@ func setupSagerun99() error {
 	return nil
 }
 
-func cleanDirContents(dirPath string, printFileOK bool, results *StepResults, stepIdx int) {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return
-	}
-
-	var wg sync.WaitGroup
-	// Concurrency worker semaphore to avoid file handle exhaustion
-	sem := make(chan struct{}, 32)
-
-	for _, entry := range entries {
-		itemPath := filepath.Join(dirPath, entry.Name())
-		entryName := entry.Name()
-
-		if !entry.IsDir() {
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(p, name string) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				defer func() {
-					if r := recover(); r != nil {
-						atomic.AddInt64(&results.TotalFailed, 1)
-					}
-				}()
-
-				err := os.Remove(p)
-				if err == nil {
-					atomic.AddInt64(&results.TotalDeleted, 1)
-					atomic.AddInt64(&results.StepCounts[stepIdx], 1)
-					if printFileOK {
-						fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", name)
-					}
-				} else {
-					atomic.AddInt64(&results.TotalFailed, 1)
-				}
-			}(itemPath, entryName)
-		} else {
-			// Subdirectory deletion
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(p string) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				defer func() {
-					if r := recover(); r != nil {
-						atomic.AddInt64(&results.TotalFailed, 1)
-					}
-				}()
-
-				err := os.RemoveAll(p)
-				if err == nil {
-					atomic.AddInt64(&results.TotalDeleted, 1)
-					atomic.AddInt64(&results.StepCounts[stepIdx], 1)
-				} else {
-					atomic.AddInt64(&results.TotalFailed, 1)
-				}
-			}(itemPath)
-		}
-	}
-
-	wg.Wait()
-}
-
-func cleanDirRecursiveFiles(dirPath string, printFileOK bool, results *StepResults, stepIdx int) {
-	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		return
-	}
-
-	var filePaths []string
-	_ = filepath.Walk(dirPath, func(p string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			filePaths = append(filePaths, p)
-		}
-		return nil
-	})
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 32)
-
-	for _, p := range filePaths {
-		wg.Add(1)
-		sem <- struct{}{}
-		name := filepath.Base(p)
-		go func(path, fileName string) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			defer func() {
-				if r := recover(); r != nil {
-					atomic.AddInt64(&results.TotalFailed, 1)
-				}
-			}()
-
-			err := os.Remove(path)
-			if err == nil {
-				atomic.AddInt64(&results.TotalDeleted, 1)
-				atomic.AddInt64(&results.StepCounts[stepIdx], 1)
-				if printFileOK {
-					fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", fileName)
-				}
-			} else {
-				atomic.AddInt64(&results.TotalFailed, 1)
-			}
-		}(p, name)
-	}
-
-	wg.Wait()
-}
-
+// RunCleaningPipeline runs the cleaning steps on the live screen and returns
+// the per-step results for the summary. Each step is an ordinary Task, so
+// the screen, pause/abort and crash handling all come from RunTasks.
 func RunCleaningPipeline(cfg *Config) (results StepResults) {
-	// Pipeline-level crash guard: if any step panics, return partial results
-	// so the summary can still be displayed.
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("\n\x1b[31m[ERROR]\x1b[0m %s\n", Tf("cleaner.crashed", r))
-			fmt.Println(T("cleaner.partial"))
-		}
-	}()
-
 	systemRoot := getEnvOrDefault("SystemRoot", `C:\Windows`)
 	userTemp := os.TempDir()
 	programData := getEnvOrDefault("ProgramData", `C:\ProgramData`)
 
-	// No artificial delay — all steps run raw and instant.
-
-	// [1/12] Windows Temp folder
-	fmt.Println()
-	if cfg.WinTemp == 1 {
-		StepHeader(1)
-		fmt.Println("+---------------------------------------+")
-		winTempDir := filepath.Join(systemRoot, "Temp")
-		cleanDirContents(winTempDir, true, &results, 1)
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(1)
+	// step wraps a step's work as a Task with its translated labels.
+	step := func(idx int, on bool, run func(tc *TaskCtx) TaskOutcome) Task {
+		return Task{
+			Name:    T(fmt.Sprintf("step.%d.short", idx)),
+			Title:   stepHeaderText(idx),
+			Alert:   idx == 12,
+			Enabled: on,
+			Run:     run,
+		}
 	}
 
-	// [2/12] User Temp folder
-	fmt.Println()
-	if cfg.UserTemp == 1 {
-		StepHeader(2)
-		fmt.Println("+---------------------------------------+")
-		cleanDirContents(userTemp, true, &results, 2)
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(2)
+	// files turns a folder-cleaning function into a step body that records
+	// its counts for the summary.
+	files := func(idx int, clean func(tc *TaskCtx) (deleted, failed int64)) func(*TaskCtx) TaskOutcome {
+		return func(tc *TaskCtx) TaskOutcome {
+			d, f := clean(tc)
+			results.TotalDeleted += d
+			results.TotalFailed += f
+			results.StepCounts[idx] += d
+			return TaskOutcome{Detail: fmt.Sprintf("%d", d)}
+		}
 	}
 
-	// [3/12] Prefetch folder
-	fmt.Println()
-	if cfg.Prefetch == 1 {
-		StepHeader(3)
-		fmt.Println("+---------------------------------------+")
-		prefetchDir := filepath.Join(systemRoot, "Prefetch")
-		cleanDirContents(prefetchDir, true, &results, 3)
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(3)
+	// serviceTree cleans a folder tree while its owning service is stopped.
+	serviceTree := func(service, dir string) func(tc *TaskCtx) (int64, int64) {
+		return func(tc *TaskCtx) (d, f int64) {
+			tc.WithService(service, func() { d, f = tc.CleanTree(dir) })
+			return d, f
+		}
 	}
 
-	// [4/12] Windows Error Reports
-	fmt.Println()
-	if cfg.ErrorReports == 1 {
-		StepHeader(4)
-		fmt.Println("+---------------------------------------+")
-		werDir := filepath.Join(programData, "Microsoft", "Windows", "WER")
-		cleanDirRecursiveFiles(werDir, true, &results, 4)
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(4)
-	}
+	tasks := []Task{
+		step(1, cfg.WinTemp == 1, files(1, func(tc *TaskCtx) (int64, int64) {
+			return tc.CleanDir(filepath.Join(systemRoot, "Temp"))
+		})),
+		step(2, cfg.UserTemp == 1, files(2, func(tc *TaskCtx) (int64, int64) {
+			return tc.CleanDir(userTemp)
+		})),
+		step(3, cfg.Prefetch == 1, files(3, func(tc *TaskCtx) (int64, int64) {
+			return tc.CleanDir(filepath.Join(systemRoot, "Prefetch"))
+		})),
+		step(4, cfg.ErrorReports == 1, files(4, func(tc *TaskCtx) (int64, int64) {
+			return tc.CleanTree(filepath.Join(programData, "Microsoft", "Windows", "WER"))
+		})),
+		step(5, cfg.DeliveryOpt == 1, files(5,
+			serviceTree("DoSvc", filepath.Join(systemRoot, "SoftwareDistribution", "DeliveryOptimization")))),
+		step(6, cfg.WinUpdate == 1, files(6,
+			serviceTree("wuauserv", filepath.Join(systemRoot, "SoftwareDistribution", "Download")))),
+		step(7, cfg.LogFiles == 1, files(7, func(tc *TaskCtx) (int64, int64) {
+			return tc.CleanTree(filepath.Join(systemRoot, "Logs"))
+		})),
+		step(8, cfg.InstallerTemp == 1, files(8,
+			serviceTree("msiserver", filepath.Join(systemRoot, "Installer", "$PatchCache$")))),
 
-	// [5/12] Delivery Optimization Cache
-	fmt.Println()
-	if cfg.DeliveryOpt == 1 {
-		StepHeader(5)
-		fmt.Println("+---------------------------------------+")
-		stopService("DoSvc")
-		doDir := filepath.Join(systemRoot, "SoftwareDistribution", "DeliveryOptimization")
-		cleanDirRecursiveFiles(doDir, true, &results, 5)
-		startService("DoSvc")
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(5)
-	}
-
-	// [6/12] Windows Update Cache
-	fmt.Println()
-	if cfg.WinUpdate == 1 {
-		StepHeader(6)
-		fmt.Println("+---------------------------------------+")
-		stopService("wuauserv")
-		wuDir := filepath.Join(systemRoot, "SoftwareDistribution", "Download")
-		cleanDirRecursiveFiles(wuDir, true, &results, 6)
-		startService("wuauserv")
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(6)
-	}
-
-	// [7/12] Windows Log Files
-	fmt.Println()
-	if cfg.LogFiles == 1 {
-		StepHeader(7)
-		fmt.Println("+---------------------------------------+")
-		logsDir := filepath.Join(systemRoot, "Logs")
-		cleanDirRecursiveFiles(logsDir, true, &results, 7)
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(7)
-	}
-
-	// [8/12] Windows Installer Temp
-	fmt.Println()
-	if cfg.InstallerTemp == 1 {
-		StepHeader(8)
-		fmt.Println("+---------------------------------------+")
-		stopService("msiserver")
-		instDir := filepath.Join(systemRoot, "Installer", "$PatchCache$")
-		cleanDirRecursiveFiles(instDir, true, &results, 8)
-		startService("msiserver")
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(8)
-	}
-
-	// [9/12] DNS Cache
-	fmt.Println()
-	if cfg.DnsFlush == 1 {
-		StepHeader(9)
-		fmt.Println("+---------------------------------------+")
-		ok := FlushDNS()
-		if ok {
-			fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", T("cleaner.dns_ok"))
-		} else {
-			fmt.Println(T("cleaner.dns_fail"))
+		step(9, cfg.DnsFlush == 1, func(tc *TaskCtx) TaskOutcome {
+			if FlushDNS() {
+				tc.Log(LogOK, T("cleaner.dns_ok"))
+				return TaskOutcome{Detail: T("summary.flushed")}
+			}
+			tc.Log(LogPlain, T("cleaner.dns_fail"))
 			results.DnsFailed = true
-		}
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(9)
-	}
+			return TaskOutcome{Detail: T("summary.failed"), Warn: true}
+		}),
 
-	// [10/12] RAM Optimization
-	fmt.Println()
-	if cfg.RamOptimize == 1 {
-		StepHeader(10)
-		fmt.Println("+---------------------------------------+")
-		results.Ram = RunRamCleaner(cfg)
-		results.RamFreedMB = results.Ram.FreedMB
-	} else {
-		StepSkipped(10)
-	}
+		step(10, cfg.RamOptimize == 1, func(tc *TaskCtx) TaskOutcome {
+			results.Ram = RunRamCleaner(cfg, tc)
+			results.RamFreedMB = results.Ram.FreedMB
+			switch r := results.Ram; {
+			case r.PrivFailed:
+				return TaskOutcome{Detail: T("summary.failed"), Warn: true}
+			case r.FreedMB > 0:
+				return TaskOutcome{Detail: fmt.Sprintf("%d MB", r.FreedMB)}
+			default:
+				return TaskOutcome{Detail: "0 MB"}
+			}
+		}),
 
-	// [11/11] Recycle Bin (OFF by default - destructive/irreversible)
-	fmt.Println()
-	if cfg.RecycleBin == 1 {
-		StepHeader(11)
-		fmt.Println("+---------------------------------------+")
-		bytesFreed, ok := EmptyRecycleBin()
-		if ok {
+		// Recycle Bin is OFF by default: destructive and irreversible.
+		step(11, cfg.RecycleBin == 1, func(tc *TaskCtx) TaskOutcome {
+			bytesFreed, ok := EmptyRecycleBin()
+			if !ok {
+				tc.Log(LogPlain, T("cleaner.bin_fail"))
+				results.RecycleBinFailed = true
+				return TaskOutcome{Detail: T("summary.failed"), Warn: true}
+			}
 			results.RecycleBinBytes = bytesFreed
+			tc.v.AddBytes(int64(bytesFreed))
 			if bytesFreed > 0 {
-				fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", Tf("cleaner.bin_freed", FormatBytesHuman(bytesFreed)))
+				tc.Log(LogOK, Tf("cleaner.bin_freed", FormatBytesHuman(bytesFreed)))
 			} else {
-				fmt.Printf("\x1b[31m[OK]\x1b[0m %s\n", T("cleaner.bin_empty"))
+				tc.Log(LogOK, T("cleaner.bin_empty"))
 			}
-		} else {
-			fmt.Println(T("cleaner.bin_fail"))
-			results.RecycleBinFailed = true
-		}
-		fmt.Println(T("common.done"))
-	} else {
-		StepSkipped(11)
+			return TaskOutcome{Detail: FormatBytesHuman(bytesFreed)}
+		}),
+
+		step(12, cfg.DeepCleanup == 1, func(tc *TaskCtx) TaskOutcome {
+			return runDeepCleanup(tc, &results)
+		}),
 	}
 
-	// [12/12] Deep Cleanup - AGGRESSIVE — one-time opt-in, always resets
-	fmt.Println()
-	if cfg.DeepCleanup == 1 {
-		TypeLine("\x1b[31m[12/12] Deep Cleanup - AGGRESSIVE...\x1b[0m", 0)
-		fmt.Println("+---------------------------------------+")
+	logDir := ""
+	if cfg.KeepLog == 1 {
+		logDir = LogDirPath()
+	}
+	rep := RunTasks(tasks, logDir)
 
-		// Configure registry for completely silent, maximum cleaning
-		if err := setupSagerun99(); err != nil {
-			fmt.Printf("\x1b[36m[WARN]\x1b[0m %s\n", Tf("cleaner.reg_fail", err))
+	for i, t := range tasks {
+		if t.Enabled && !rep.Ran[i] {
+			results.NotRun[i+1] = true
 		}
-
-		// --- Command 1: cleanmgr.exe /sagerun:99 ---
-		// cleanmgr.exe is a GUI stub: it spawns a background worker
-		// (dismhost.exe / cleanmgr.exe worker) and the parent exits
-		// immediately with success, so cmd.Run() alone proves nothing.
-		// We launch it, then poll for the worker process to disappear.
-		fmt.Printf("  %s\n", T("cleaner.cleanmgr_run"))
-		cmd1 := exec.Command("cleanmgr.exe", "/sagerun:99")
-		cmd1.Stdout = os.Stdout
-		cmd1.Stderr = os.Stderr
-		if err := cmd1.Run(); err != nil {
-			fmt.Printf("  \x1b[36m[WARN]\x1b[0m %s\n", Tf("cleaner.cleanmgr_fail", err))
-			results.DeepCleanupFailed = true
-		} else {
-			// Wait for background cleanmgr worker to finish.
-			// Poll every 2 seconds for up to 5 minutes.
-			fmt.Printf("  %s\n", T("cleaner.cleanmgr_wait"))
-			cleanmgrDone := false
-			for i := 0; i < 150; i++ {
-				time.Sleep(2 * time.Second)
-				// tasklist filter: check if any cleanmgr.exe process is running
-				check := exec.Command("tasklist", "/FI", "IMAGENAME eq cleanmgr.exe", "/NH")
-				out, _ := check.Output()
-				if len(out) == 0 || !containsIgnoreCase(string(out), "cleanmgr.exe") {
-					cleanmgrDone = true
-					break
-				}
-			}
-			if cleanmgrDone {
-				fmt.Printf("  \x1b[31m[OK]\x1b[0m %s\n", T("cleaner.cleanmgr_ok"))
-			} else {
-				fmt.Printf("  \x1b[36m[WARN]\x1b[0m %s\n", T("cleaner.cleanmgr_time"))
-				results.DeepCleanupFailed = true
-			}
-		}
-
-		results.DeepCleanupRan = true
-		fmt.Println(T("common.done"))
-
-		// CRITICAL: always reset back to OFF after running
-		cfg.DeepCleanup = 0
-	} else {
-		StepSkipped(12)
+	}
+	results.Aborted = rep.Aborted
+	results.LogPath = rep.LogPath
+	if rep.LogErr != nil {
+		results.LogErr = rep.LogErr.Error()
 	}
 
+	// Deep Cleanup is one-shot: always back to OFF after a run, including a
+	// run that was aborted before reaching it.
+	cfg.DeepCleanup = 0
 	return results
+}
+
+// cleanmgr wait limits. cleanmgr.exe is a GUI stub: it hands the work to a
+// background worker and exits at once, so its exit proves nothing - the
+// worker process is polled until it disappears.
+const (
+	cleanmgrTimeout = 5 * time.Minute
+	cleanmgrPoll    = 2 * time.Second
+)
+
+// runDeepCleanup runs Windows Disk Cleanup with every handler enabled.
+func runDeepCleanup(tc *TaskCtx, results *StepResults) TaskOutcome {
+	results.DeepCleanupRan = true
+	partial := func() TaskOutcome {
+		results.DeepCleanupFailed = true
+		return TaskOutcome{Detail: T("summary.partial"), Warn: true}
+	}
+
+	// Configure registry for completely silent, maximum cleaning.
+	if err := setupSagerun99(); err != nil {
+		tc.Log(LogWarn, Tf("cleaner.reg_fail", err))
+	}
+
+	tc.Log(LogPlain, "  "+T("cleaner.cleanmgr_run"))
+	// No Stdout/Stderr: anything it printed would tear the live screen.
+	if err := exec.Command("cleanmgr.exe", "/sagerun:99").Run(); err != nil {
+		tc.Log(LogWarn, Tf("cleaner.cleanmgr_fail", err))
+		return partial()
+	}
+
+	tc.Log(LogPlain, "  "+T("cleaner.cleanmgr_wait"))
+	deadline := time.Now().Add(cleanmgrTimeout)
+	for cleanmgrRunning() {
+		if time.Now().After(deadline) {
+			tc.Log(LogWarn, T("cleaner.cleanmgr_time"))
+			return partial()
+		}
+		// Sleep in short slices so Q is answered promptly.
+		for slept := time.Duration(0); slept < cleanmgrPoll; slept += 200 * time.Millisecond {
+			if !tc.Checkpoint() {
+				tc.Log(LogWarn, T("cleaner.cleanmgr_left"))
+				return partial()
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	tc.Log(LogOK, T("cleaner.cleanmgr_ok"))
+	return TaskOutcome{Detail: T("summary.completed")}
+}
+
+// cleanmgrRunning reports whether a cleanmgr.exe process exists. If
+// tasklist itself fails, it is treated as finished rather than waiting out
+// the full timeout.
+func cleanmgrRunning() bool {
+	out, err := exec.Command("tasklist", "/FI", "IMAGENAME eq cleanmgr.exe", "/NH").Output()
+	if err != nil {
+		return false
+	}
+	return containsIgnoreCase(string(out), "cleanmgr.exe")
+}
+
+// LogDirPath is where run logs are kept: a "logs" folder next to qc.exe.
+func LogDirPath() string {
+	return filepath.Join(filepath.Dir(ConfigFilePath()), "logs")
 }
 
 // containsIgnoreCase reports whether s contains substr, ignoring case.

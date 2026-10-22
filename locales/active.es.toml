@@ -100,7 +100,6 @@
 
 # --- Salida del limpiador ---
 "cleaner.crashed" = "El proceso de limpieza falló: %v"
-"cleaner.partial" = "Se mostrarán los resultados parciales."
 "cleaner.dns_ok" = "Caché DNS vaciada"
 "cleaner.dns_fail" = "[SKIP] No se pudo vaciar la caché DNS"
 "cleaner.bin_freed" = "Papelera de reciclaje vaciada - %s liberados"
