@@ -60,7 +60,7 @@ const (
 // deliberately not recorded or shown - they add noise to every version check
 // and make otherwise identical builds look different.
 var (
-	Version = "2.5.1"
+	Version = "2.5.2"
 	Commit  = ""
 )
 
