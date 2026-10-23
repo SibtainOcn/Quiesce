@@ -93,6 +93,7 @@ qc temp-1 deep bin  # any mix of steps
 | `ram-1` ... `ram-4` | One memory method: 1 save pending changes, 2 free cached memory, 3 free file cache, 4 trim app memory |
 | `bin` (or `recycle`) | Empties the Recycle Bin |
 | `deep` | Full Windows Disk Cleanup |
+| `no-ram` | Everything except RAM, Recycle Bin and Deep Cleanup (steps 1-9) |
 
 Good to know:
 

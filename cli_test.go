@@ -140,6 +140,32 @@ func TestDirectSummaryShowsOnlyChosenSteps(t *testing.T) {
 	}
 }
 
+func TestChecklistSummaryShowsOnlyTotals(t *testing.T) {
+	var b strings.Builder
+	WriteSummary(&b, DefaultConfig(), StepResults{TotalDeleted: 480, TotalFailed: 137, Checklist: true})
+	out := stripANSI(b.String())
+	if !strings.Contains(out, stripANSI(Tf("summary.total", 480))) || !strings.Contains(out, Tf("summary.skipped", 137)) {
+		t.Errorf("totals missing:\n%s", out)
+	}
+	for _, s := range []string{T("summary.title"), "[1]", T("step.1.short")} {
+		if strings.Contains(out, s) {
+			t.Errorf("checklist summary should not contain %q", s)
+		}
+	}
+}
+
+func TestNoRamRunsStepsOneToNine(t *testing.T) {
+	cfg := BuildRunConfig(DefaultConfig(), []string{"no-ram"})
+	for i := 1; i <= 9; i++ {
+		if cfg.GetVal(i) != 1 {
+			t.Errorf("step %d should be ON", i)
+		}
+	}
+	if cfg.RamOptimize != 0 || cfg.RecycleBin != 0 || cfg.DeepCleanup != 0 {
+		t.Error("no-ram should leave RAM, Recycle Bin and Deep Cleanup OFF")
+	}
+}
+
 func TestEveryCommandHasStep(t *testing.T) {
 	for _, c := range cliCommands {
 		cfg := BuildRunConfig(DefaultConfig(), []string{c.name})

@@ -824,10 +824,13 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 			fmt.Fprintf(w, "  %s\n\n", hint)
 		}
 	}
-	fmt.Fprintln(w, "+---------------------------------------+")
-	fmt.Fprintln(w, centerInBox(T("summary.title")))
-	fmt.Fprintln(w, "+---------------------------------------+")
-	fmt.Fprintln(w)
+	// The minimal checklist already lists every step, so only the totals follow it.
+	if !results.Checklist {
+		fmt.Fprintln(w, "+---------------------------------------+")
+		fmt.Fprintln(w, centerInBox(T("summary.title")))
+		fmt.Fprintln(w, "+---------------------------------------+")
+		fmt.Fprintln(w)
+	}
 	// Direct commands list only the steps that were asked for.
 	only := cfg.directRun
 	fileSteps := false
@@ -845,6 +848,28 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 	if showTotals || results.Aborted {
 		fmt.Fprintln(w)
 	}
+	if !results.Checklist {
+		writeStepLines(w, cfg, results)
+		fmt.Fprintln(w)
+	}
+
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintf(w, "  %s\n", T("summary.all_done"))
+	fmt.Fprintln(w, "+---------------------------------------+")
+	fmt.Fprintln(w)
+	if results.LogPath != "" {
+		fmt.Fprintf(w, "  %s\n", Tf("summary.log_saved", results.LogPath))
+	}
+	if results.LogErr != "" {
+		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, Tf("summary.log_fail", results.LogErr), RST)
+	}
+	fmt.Fprintf(w, "  %s\n", VersionLine())
+	fmt.Fprintln(w)
+}
+
+// writeStepLines writes the per-step rows of the summary.
+func writeStepLines(w io.Writer, cfg *Config, results StepResults) {
+	only := cfg.directRun
 
 	// Summary labels are padded to the widest translated label rather than
 	// carrying typed trailing spaces, so the ":" column holds in any language.
@@ -970,18 +995,4 @@ func WriteSummary(w io.Writer, cfg *Config, results StepResults) {
 	if !only || results.DeepCleanupRan || results.NotRun[12] {
 		fmt.Fprintf(w, "  %-5s%s : %s\n", num(12), deepTag, deepState)
 	}
-
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "+---------------------------------------+")
-	fmt.Fprintf(w, "  %s\n", T("summary.all_done"))
-	fmt.Fprintln(w, "+---------------------------------------+")
-	fmt.Fprintln(w)
-	if results.LogPath != "" {
-		fmt.Fprintf(w, "  %s\n", Tf("summary.log_saved", results.LogPath))
-	}
-	if results.LogErr != "" {
-		fmt.Fprintf(w, "  %s%s%s\n", YELLOW, Tf("summary.log_fail", results.LogErr), RST)
-	}
-	fmt.Fprintf(w, "  %s\n", VersionLine())
-	fmt.Fprintln(w)
 }

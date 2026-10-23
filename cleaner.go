@@ -45,7 +45,10 @@ type StepResults struct {
 	// aborted. Zero value means "ran", so older callers need no changes.
 	NotRun  [13]bool
 	Aborted bool
-	LogPath string // log file written for this run, if any
+	// Checklist is set when the minimal checklist stayed on screen, so the
+	// summary can leave out the per-step list it already shows.
+	Checklist bool
+	LogPath   string // log file written for this run, if any
 	LogErr  string // why the log file could not be written, if it failed
 }
 
@@ -254,6 +257,7 @@ func RunCleaningPipeline(cfg *Config) (results StepResults) {
 		}
 	}
 	results.Aborted = rep.Aborted
+	results.Checklist = rep.Checklist
 	results.LogPath = rep.LogPath
 	if rep.LogErr != nil {
 		results.LogErr = rep.LogErr.Error()

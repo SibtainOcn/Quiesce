@@ -308,6 +308,7 @@
 "help.cmd_all" = "Every step that is ON in your saved settings"
 "help.cmd_temp" = "Windows Temp + User Temp"
 "help.cmd_ram" = "RAM Optimization, all 4 sub-options"
+"help.cmd_noram" = "Steps 1-9: everything except RAM, Recycle Bin and Deep Cleanup"
 "help.elevate" = "From a normal terminal, approve the admin (UAC) prompt and the run shows right here."
 "help.tools" = "Tools:"
 "help.desc_update" = "Update Quiesce to the latest release"

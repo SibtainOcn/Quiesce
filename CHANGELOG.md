@@ -5,6 +5,16 @@ All notable changes to Quiesce are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `qc no-ram` runs steps 1-9: everything except RAM, Recycle Bin and Deep Cleanup.
+
+### Changed
+
+- With the minimal output style, the end summary shows only the item totals; the checklist above it already lists every step.
+
 ## [2.5.1] - 2026-10-22
 
 ### Added

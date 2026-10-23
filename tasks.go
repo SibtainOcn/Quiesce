@@ -40,8 +40,9 @@ type TaskOutcome struct {
 // RunReport summarises a whole run.
 type RunReport struct {
 	Ran     []bool // per task: whether it started
-	Aborted bool
-	Bytes   int64
+	Aborted   bool
+	Checklist bool // the minimal checklist was shown and left on screen
+	Bytes     int64
 	LogPath string // empty when no log file was kept
 	LogErr  error
 }
@@ -116,6 +117,7 @@ func RunTasks(tasks []Task, opts RunOptions) (rep RunReport) {
 	defer func() {
 		v.Finish()
 		rep.Aborted = v.Aborted()
+		rep.Checklist = v.mode == modeMinimal
 		_, rep.Bytes, _ = v.Totals()
 		rep.LogPath, rep.LogErr = v.Close()
 	}()

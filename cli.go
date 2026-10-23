@@ -60,6 +60,11 @@ var cliCommands = []cliCommand{
 	{name: "ram-4", step: 10, sub: 104, apply: func(c *Config) { c.RamOptimize, c.RamTrimWorkingSets = 1, 1 }},
 	{name: "bin", aliases: []string{"recycle"}, step: 11, apply: func(c *Config) { c.RecycleBin = 1 }},
 	{name: "deep", step: 12, apply: func(c *Config) { c.DeepCleanup = 1 }},
+	// no-ram runs steps 1-9: everything except RAM, Recycle Bin and Deep Cleanup.
+	{name: "no-ram", step: 1, apply: func(c *Config) {
+		c.WinTemp, c.UserTemp, c.Prefetch, c.ErrorReports = 1, 1, 1, 1
+		c.DeliveryOpt, c.WinUpdate, c.LogFiles, c.InstallerTemp, c.DnsFlush = 1, 1, 1, 1, 1
+	}},
 }
 
 func findCLICommand(token string) (cliCommand, bool) {
@@ -183,6 +188,8 @@ func printCLICommands() {
 			desc = T("help.cmd_temp")
 		case c.name == "ram":
 			desc = T("help.cmd_ram")
+		case c.name == "no-ram":
+			desc = T("help.cmd_noram")
 		default:
 			desc = T(fmt.Sprintf("step.%d.short", c.step))
 		}
