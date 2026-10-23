@@ -52,20 +52,18 @@ jobs:
             exit 1
           fi
 
-      - name: Build
-        run: go build ./...
-
+      # vet and test compile every package, so no separate build step.
       - name: Vet
         run: go vet ./...
 
       - name: Test
         run: go test -count=1 ./...
 
-  # gofmt is purely syntactic, so it does not need Windows. Running it on
-  # Linux also sidesteps Git for Windows checking the sources out with CRLF,
-  # which gofmt would report as a diff on every single file.
-  format:
-    name: gofmt
+  # gofmt runs on Linux to avoid the CRLF checkout on Windows, which gofmt
+  # would flag on every file. The 386 build lives here too; amd64 is already
+  # built by the Windows jobs above.
+  lint:
+    name: gofmt and 386 build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +71,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: true
 
       - name: Check formatting
         run: |
@@ -84,24 +83,8 @@ jobs:
             exit 1
           fi
 
-  # Both shipped architectures must compile. Cross-compiling from Linux is
-  # enough to catch an arch-specific mistake without a second Windows runner.
-  crossbuild:
-    name: Cross-build ${{ matrix.goarch }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goarch: [amd64, '386']
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: true
-
-      - name: Build
+      - name: Build 386
         env:
           GOOS: windows
-          GOARCH: ${{ matrix.goarch }}
+          GOARCH: '386'
         run: go build -o /dev/null .

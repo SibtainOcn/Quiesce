@@ -49,7 +49,7 @@ type StepResults struct {
 	// summary can leave out the per-step list it already shows.
 	Checklist bool
 	LogPath   string // log file written for this run, if any
-	LogErr  string // why the log file could not be written, if it failed
+	LogErr    string // why the log file could not be written, if it failed
 }
 
 func stopService(name string) {

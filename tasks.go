@@ -39,12 +39,12 @@ type TaskOutcome struct {
 
 // RunReport summarises a whole run.
 type RunReport struct {
-	Ran     []bool // per task: whether it started
+	Ran       []bool // per task: whether it started
 	Aborted   bool
 	Checklist bool // the minimal checklist was shown and left on screen
 	Bytes     int64
-	LogPath string // empty when no log file was kept
-	LogErr  error
+	LogPath   string // empty when no log file was kept
+	LogErr    error
 }
 
 // RunOptions configures a run.
